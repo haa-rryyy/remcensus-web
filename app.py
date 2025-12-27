@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import re
 from pinecone import Pinecone
-from google import genai
+import google.generativeai as genai
 
 # 1. SETUP (Using Secrets instead of hardcoding)
 # This allows the cloud server to inject the passwords safely
