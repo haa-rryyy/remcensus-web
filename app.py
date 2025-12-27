@@ -22,27 +22,36 @@ if 'init_done' not in st.session_state:
     genai.configure(api_key=GEMINI_KEY)
     st.session_state.init_done = True
 
-# --- HELPER: AUTO-DETECT MODEL ---
-def get_best_model():
-    """Asks Google which models are actually available to avoid 404s."""
+# --- HELPER: SAFE MODEL SELECTOR ---
+def get_safe_model():
+    """Finds a free-tier compatible model, avoiding the 'Pro' quota traps."""
     try:
-        available_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                available_models.append(m.name)
+        # 1. Try to list available models
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # Priority list: Try to find these specific ones
-        for model in available_models:
-            if 'gemini-1.5-flash' in model: return model
-            if 'gemini-pro' in model: return model
+        # 2. STRICT PRIORITY LIST (Free Tier Favorites)
+        # We explicitly look for these names because we know they work.
+        priorities = [
+            "models/gemini-1.5-flash",
+            "models/gemini-1.5-flash-001",
+            "models/gemini-1.0-pro",
+            "models/gemini-pro"
+        ]
         
-        # If no favorites found, take the first one that works
-        if available_models:
-            return available_models[0]
+        for priority in priorities:
+            if priority in available_models:
+                return priority
+                
+        # 3. Fallback: If exact matches fail, take the first 'flash' model found
+        for m in available_models:
+            if 'flash' in m: return m
             
-        return "models/gemini-pro" # Blind fallback
+        # 4. Desperation Fallback
+        return "models/gemini-1.5-flash"
+        
     except Exception as e:
-        return f"Error: {e}"
+        # If listing fails, force the standard one
+        return "models/gemini-1.5-flash"
 
 # --- 2. SIDEBAR DASHBOARD ---
 with st.sidebar:
@@ -57,8 +66,9 @@ with st.sidebar:
     st.info("Drink and Learn")
     
     st.markdown("---")
-    # DEBUG: Show which model is selected
-    active_model = get_best_model()
+    
+    # Get the safe model
+    active_model = get_safe_model()
     st.text(f" Active Model:\n {active_model.replace('models/', '')}")
 
 # --- 3. MAIN INTERFACE ---
@@ -94,7 +104,7 @@ if query:
                 text = meta.get('text', '')
                 context_text += f"Source: {source}\nContent: {text}\n\n"
 
-            # 4. Generate Answer (Using the auto-detected model)
+            # 4. Generate Answer
             prompt = f"""
             You are the Librarian of the 'Remier League. Answer the question based strictly on the context below.
             If the answer is not in the context, say "Data not found in the archives."
@@ -106,12 +116,19 @@ if query:
             Question: {query}
             """
             
+            # Use the safe model we found earlier
             model = genai.GenerativeModel(active_model)
             response = model.generate_content(prompt)
             final_answer = response.text
 
         except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
+            # Clean Error Handling
+            if "429" in str(e):
+                final_answer = "⚠️ Error: Quota Limit Exceeded. Please wait 60 seconds."
+            elif "404" in str(e):
+                final_answer = f"⚠️ Error: Model {active_model} unavailable. Try reloading."
+            else:
+                final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     # --- 4. DISPLAY RESULTS ---
@@ -119,7 +136,10 @@ if query:
 
     with col1:
         st.subheader("📝 Consensus Summary")
-        st.info(final_answer)
+        if "⚠️" in final_answer:
+            st.error(final_answer)
+        else:
+            st.info(final_answer)
 
     with col2:
         st.subheader("📂 Reference Data")
