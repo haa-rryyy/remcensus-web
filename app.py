@@ -86,7 +86,7 @@ if query:
             Question: {query}
             """
             
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash-001')
             response = model.generate_content(prompt)
             final_answer = response.text
 
