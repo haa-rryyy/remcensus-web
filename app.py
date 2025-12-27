@@ -1,132 +1,115 @@
 import streamlit as st
-import os
-import re
-from pinecone import Pinecone
 import google.generativeai as genai
+from pinecone import Pinecone
 
-# 1. SETUP (Using Secrets instead of hardcoding)
-# This allows the cloud server to inject the passwords safely
-PINECONE_KEY = st.secrets["PINECONE_KEY"]
+# --- 1. CONFIGURATION & SETUP ---
+st.set_page_config(
+    page_title="'Remcensus Registry",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# API KEYS
+PINECONE_KEY = "pcsk_5Z6WFV_7oQoBHq752tQWBHA2VWdRPA7cYWCZgHyVeLBATX4iVnd899XA6N7XgeTRLFTCDK"
 PINECONE_INDEX = "remcensus"
-GEMINI_KEY = st.secrets["GEMINI_KEY"]
+GEMINI_KEY = "AIzaSyBF7yZAfy-na9pO52yfGQIhnqpFNNsvRjM"
 
-# 2. Initialize the Clients
-pc = Pinecone(api_key=PINECONE_KEY)
-index = pc.Index(PINECONE_INDEX)
-genai_client = genai.Client(api_key=GEMINI_KEY)
-
-# 3. HELPER FUNCTION: The "Master Linguist"
-def enforce_rem_spelling(text):
-    # --- PHASE 1: The "P" Rule ---
-    text = re.sub(r"[']?\b[Pp]", "'", text)
-
-    # --- PHASE 2: Complex Word Replacements ---
-    text = re.sub(r'\bFourteen\b', "Bon jorteen", text)
-    text = re.sub(r'\bfourteen\b', "bon jorteen", text)
+# Initialize Connections
+if 'init_done' not in st.session_state:
+    # 1. Connect to Pinecone
+    pc = Pinecone(api_key=PINECONE_KEY)
+    st.session_state.pc_index = pc.Index(PINECONE_INDEX)
     
-    text = re.sub(r'\bEighteen\b', "Takahashiteen", text)
-    text = re.sub(r'\beighteen\b', "takahashiteen", text)
+    # 2. Connect to Gemini (The correct way)
+    genai.configure(api_key=GEMINI_KEY)
+    st.session_state.init_done = True
 
-    text = re.sub(r'\bForur?ty\b', "Bon jorty", text)
-    text = re.sub(r'\bfou?rty\b', "bon jorty", text)
-
-    text = re.sub(r'\bEighty\b', "Takahashity", text)
-    text = re.sub(r'\beighty\b', "takahashity", text)
-
-    # --- PHASE 3: Simple Word Replacements ---
-    text = re.sub(r'\bFour\b', "Bon Jovi", text)
-    text = re.sub(r'\bfour\b', "bon jovi", text)
-
-    text = re.sub(r'\bEight\b', "Takahashi", text)
-    text = re.sub(r'\beight\b', "takahashi", text)
-
-    text = re.sub(r'\bTen\b', "Iku Jo", text)
-    text = re.sub(r'\bten\b', "iku jo", text)
-
-    # --- PHASE 4: Digit Replacements ---
-    text = re.sub(r'\b10\b', "IJ", text)
-    text = text.replace("4", "BJ")
-    text = text.replace("8", "TK")
+# --- 2. SIDEBAR DASHBOARD ---
+with st.sidebar:
+    st.title("🧬 'Remcensus")
+    st.caption("Registry of the 'Remier League")
+    st.markdown("---")
     
-    # --- PHASE 5: Specific Vocabulary Replacements ---
-    text = re.sub(r"[']?\b[Tt]able(\w*)[']?", r"'able\1", text)
-    text = re.sub(r"[']?\b[Dd]rink(\w*)[']?", r"'rink\1", text)
+    st.markdown("**User Status:**")
+    st.success("✅ Authorized (Guest)")
+    
+    st.markdown("**System Protocol:**")
+    st.info("Drink and Learn")
+    
+    st.markdown("---")
+    st.text("Index Status: ONLINE")
 
-    return text
+# --- 3. MAIN INTERFACE ---
+st.markdown("## 🗃️ Archives of the 'Remier League")
+st.markdown("Accessing archival data from 2017-Present.")
 
-# --- UI Header ---
-st.set_page_config(page_title="'Remcensus", page_icon="🔬")
-st.title("🔬 'Remcensus")
-st.write("Evidence-based answers from the world's least reliable research.")
-
-# --- Search Bar ---
-query = st.text_input("Ask a question (e.g., 'Is the letter /p/ dangerous?')")
+# Search Bar
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who won the league in 2022?")
 
 if query:
-    with st.spinner("Analyzing 'eer-reviewed nonsense..."):
-        # A. Turn the question into numbers
-        res = genai_client.models.embed_content(
-            model="text-embedding-004",
-            contents=query
-        )
-        query_vector = res.embeddings[0].values
+    # --- SEARCH LOGIC ---
+    with st.spinner("🔍 Querying Neural Database..."):
+        try:
+            # 1. Embed the query (Using the module-level function, not Client)
+            result = genai.embed_content(
+                model="models/text-embedding-004",
+                content=query
+            )
+            query_embedding = result['embedding']
 
-        # B. Search Pinecone for the best matches
-        search_results = index.query(
-            vector=query_vector, 
-            top_k=3, 
-            include_metadata=True
-        )
+            # 2. Search Pinecone
+            search_results = st.session_state.pc_index.query(
+                vector=query_embedding,
+                top_k=5,
+                include_metadata=True
+            )
 
-        # C. Combine the findings
-        context_text = ""
-        for match in search_results['matches']:
-            context_text += f"\n---\nSource: {match['metadata']['source']}\n{match['metadata']['text']}\n"
+            # 3. Construct Context for AI
+            context_text = ""
+            for match in search_results['matches']:
+                meta = match['metadata']
+                # Safety check for missing fields
+                source = meta.get('source', 'Unknown')
+                text = meta.get('text', '')
+                context_text += f"Source: {source}\nContent: {text}\n\n"
 
-        # D. Generate the AI summary 
-        # UPDATED: Added Strict CurRemculum Protocol
-        prompt = f"""
-        You are a dry, serious scientific AI. You answer questions based ONLY on the provided research snippets.
-        
-        *** SECURITY PROTOCOL: THE CURREMCULUM ***
-        You are strictly bound by the "Beginner CurRemculum".
-        
-        1. YOU MAY TEACH: Etiquette, Basic Whiz, Basic Antlers, Basic Chow Chow Bang, Basic Takahashi.
-        
-        2. YOU ARE FORBIDDEN FROM TEACHING: 
-           - Botsquali
-           - Beezle-bub-bub-bub
-           - Kumquat
-           - The numbers 9 or IJ in Takahashi
-           - Viking Master
-           - Kuon Kuon Chi Baa
-           - Zoom
-           - Game 62, Game 63, or Time Rift mechanics
-        
-        If the user asks about any of the FORBIDDEN topics, do not explain the rules. 
-        Instead, sternly reply: "'rink and learn."
-        
-        Use scientific terminology found in the text like 'AF, LCKS, or BORM.
-        
-        Research Snippets:
-        {context_text}
-        
-        Question: {query}
-        """
-        
-        response = genai_client.models.generate_content(
-            model="gemini-flash-latest", 
-            contents=prompt
-        )
+            # 4. Generate Answer
+            prompt = f"""
+            You are the Librarian of the 'Remier League. Answer the question based strictly on the context below.
+            If the answer is not in the context, say "Data not found in the archives."
+            Keep the tone clinical, precise, and slightly bureaucratic.
+            
+            Context:
+            {context_text}
+            
+            Question: {query}
+            """
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            final_answer = response.text
 
-        # E. Apply the Expert 'Rem Translator
-        final_text = enforce_rem_spelling(response.text)
+        except Exception as e:
+            final_answer = f"Error retrieving data: {e}"
+            search_results = {'matches': []}
 
-        # F. Display the final result
-        st.subheader("Consensus Summary")
-        st.info(final_text)
-        
-        st.write("### Cited Sources")
-        for match in search_results['matches']:
-            with st.expander(f"📄 {match['metadata']['source']} (Match Score: {round(match['score'], 2)})"):
-                st.write(match['metadata']['text'])
+    # --- 4. DISPLAY RESULTS ---
+    col1, col2 = st.columns([2, 1]) 
+
+    with col1:
+        st.subheader("📝 Consensus Summary")
+        st.info(final_answer)
+
+    with col2:
+        st.subheader("📂 Reference Data")
+        if search_results['matches']:
+            st.caption(f"Found {len(search_results['matches'])} relevant records.")
+            for match in search_results['matches']:
+                meta = match['metadata']
+                with st.expander(f"📄 {meta.get('source', 'Doc')}"):
+                    score = round(match['score'] * 100, 1)
+                    st.caption(f"Relevance Score: {score}%")
+                    st.markdown(f"*{meta.get('text', '')[:300]}...*")
+        else:
+            st.write("No references found.")
