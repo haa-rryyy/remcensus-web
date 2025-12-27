@@ -17,13 +17,32 @@ GEMINI_KEY = "AIzaSyBF7yZAfy-na9pO52yfGQIhnqpFNNsvRjM"
 
 # Initialize Connections
 if 'init_done' not in st.session_state:
-    # 1. Connect to Pinecone
     pc = Pinecone(api_key=PINECONE_KEY)
     st.session_state.pc_index = pc.Index(PINECONE_INDEX)
-    
-    # 2. Connect to Gemini (The correct way)
     genai.configure(api_key=GEMINI_KEY)
     st.session_state.init_done = True
+
+# --- HELPER: AUTO-DETECT MODEL ---
+def get_best_model():
+    """Asks Google which models are actually available to avoid 404s."""
+    try:
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        
+        # Priority list: Try to find these specific ones
+        for model in available_models:
+            if 'gemini-1.5-flash' in model: return model
+            if 'gemini-pro' in model: return model
+        
+        # If no favorites found, take the first one that works
+        if available_models:
+            return available_models[0]
+            
+        return "models/gemini-pro" # Blind fallback
+    except Exception as e:
+        return f"Error: {e}"
 
 # --- 2. SIDEBAR DASHBOARD ---
 with st.sidebar:
@@ -38,7 +57,9 @@ with st.sidebar:
     st.info("Drink and Learn")
     
     st.markdown("---")
-    st.text("Index Status: ONLINE")
+    # DEBUG: Show which model is selected
+    active_model = get_best_model()
+    st.text(f" Active Model:\n {active_model.replace('models/', '')}")
 
 # --- 3. MAIN INTERFACE ---
 st.markdown("## 🗃️ Archives of the 'Remier League")
@@ -51,7 +72,7 @@ if query:
     # --- SEARCH LOGIC ---
     with st.spinner("🔍 Querying Neural Database..."):
         try:
-            # 1. Embed the query (Using the module-level function, not Client)
+            # 1. Embed the query
             result = genai.embed_content(
                 model="models/text-embedding-004",
                 content=query
@@ -65,16 +86,15 @@ if query:
                 include_metadata=True
             )
 
-            # 3. Construct Context for AI
+            # 3. Construct Context
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
-                # Safety check for missing fields
                 source = meta.get('source', 'Unknown')
                 text = meta.get('text', '')
                 context_text += f"Source: {source}\nContent: {text}\n\n"
 
-            # 4. Generate Answer
+            # 4. Generate Answer (Using the auto-detected model)
             prompt = f"""
             You are the Librarian of the 'Remier League. Answer the question based strictly on the context below.
             If the answer is not in the context, say "Data not found in the archives."
@@ -86,12 +106,12 @@ if query:
             Question: {query}
             """
             
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel(active_model)
             response = model.generate_content(prompt)
             final_answer = response.text
 
         except Exception as e:
-            final_answer = f"Error retrieving data: {e}"
+            final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     # --- 4. DISPLAY RESULTS ---
