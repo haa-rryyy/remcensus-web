@@ -1,0 +1,69 @@
+Fraternitas de flucto sucina exorta
+Cascade Theory Document
+
+Theoretical Fluid Consumption Terminal Velocity in the Average Adult Male
+University of Adelaide: Medical School Research Department
+
+AIM:
+To theoretically define the maximum possible speed for fluid consumption in the average male, using a range of estimated values and an acceptable level of assumption regarding physical factors.
+
+DATA:
+- the oesophagus can move liquid from the upper oesophageal sphincter to the stomach in about one second.
+- the oesophagus of the average adult male is 30.5cm long and 2.5cm in diameter when accommodating a bolus.
+- studies suggest that the average adult male has an oral cavity with a volume of 159.78 ml.
+
+PERISTALTIC-OESOPHAGUS SKOLLING:
+The following calculations are applicable to those skollers whom 'swallow' their beer: these skollers employ the usual mechanism of peristaltic deglutination in removing fluid from their oral cavity.
+
+CALCULATIONS:
+The total volume of the oesophagus can be estimated to be:
+Volume = (pi * r^2) * length
+= ~150 ml
+
+From this we can deduce that the oesophagus is capable of introducing ~150ml.s^-1 to the stomach. This is important as it is the rate at which fluid can be introduced: to pour fluid any faster would overwhelm the peristaltic capabilities of the oesophagus, and result in filling of the oral cavity and possible spillage.
+
+The rate at which fluid can be introduced to the oesophagus is dependant on the vessel which is used to pour it. A shorter, wider glass will result in a faster rate of introduction than a longer and thinner glass: however, our estimate of the quickest possible speed one can skoll depends on the negligible existence of turbulence. If the vessel chosen is too wide, the thick column of fluid will rush against the sides of the oesophagus and lead to turbulence and a subsequent decreased rate of flow. Therefore, in this estimation we will consider an average man skolling from an average 285ml schooner:
+
+We estimate the average schooner to be 13 centimetres high, with a corresponding average radius of 2.64 centimetres. If we assume that the force of friction retarding the fall of the fluid is insignificant, and that the drinker holds the vessel vertically upside down, the volume of fluid introduced to the oesophagus is a function of integrated gravitational acceleration against time.
+
+If we analyse the graph (not shown), it can be seen that the quickest time in which the standard amount of fluid [285ml] can possibly be delivered to the oesophagus is 0.16 seconds. As previously noted, the oesophagus is theoretically only able to deliver 150ml every second to the stomach. The time in which a drinker might provide 285ml for the oesophagus is 0.16 seconds. In these 0.16 seconds, the oesophagus is only capable of clearing 24ml of fluid [150ml.s^-1 * 0.16s]. Hence we see that the drinker must store some of the fluid in his oral cavity, which will then be processed by the oesophagus at the greatest possible speed, while allowing the drinker to claim to have emptied his vessel.
+
+The average adult male has an oral cavity with a capacity of 159.78ml. Unfortunately, this storage space is insufficient to hold the 261ml of the original 285ml that remains extra-oesophageal after the 0.16s delivery [285ml - 24ml = 261ml]. Hence, if the drinker were to pour the fluid AND move it to his stomach as fast as his oesophagus may allow, there would still be a total of 101.22ml spillage at the end of the initial 0.16s delivery; this is, of course, unacceptable.
+
+We have now theoretically proven that the peristaltic capability of the oesophagus is the rate limiting step in the consumption of fluid in these skollers. With this shown, we are close to finding the fastest rate in which one could theoretically consume a 285ml schooner of fluid.
+
+The above, however, does not take into account the oral cavity, and the advantage it confers to the drinker, whose aim is only to empty his vessel with no spillage; he does not actually need to move all the fluid to his stomach to empty his schooner. If we recall that the oral cavity of the average adult male is 159.78ml, it can be said that as:
+1. The rate of fluid delivery to the oesophagus is NOT the rate limiting factor,
+2. The rate of fluid removal by the oesophagus IS the rate limiting factor, and is set at ~150ml.s^-1
+3. The oral cavity can be estimated to be 159.78ml
+
+Considering this, you must agree in saying that the quickest possible emptying of the vessel will be the time it takes for the oesophagus to remove 125.22ml from the oral cavity [285ml - 159.78ml = 125.22ml]. By our calculations, this should be equal to 0.8348s [(125.22ml / 150ml.s^-1) = 0.8348s]. The remaining 159.78ml filling the oral cavity would be removed in the subsequent 1.0652s; although this is insignificant in terms of sheer emptying of the vessel.
+
+ASSUMPTIONS AND WEAKNESSES:
+Is it correctly proven above that the delivery of fluid from the vessel is NOT the rate limiting step? To what extent can the oesophagus be pushed, and do its peristaltic contractions really have a negligible effect on total oesophageal capacity? What of the factor of turbulence - is this under-represented in the above calculations? And peristaltic-oesophagus skolling: is it really applicable to the superior and elite skollers involve in the Cascade Cup?
+
+To highlight the weaknesses of the application of peristaltic-oesophageal skolling to elite skollers, it is pertinent to acknowledge: "Steven Petrosino drank 1 liter of beer (33 ounces) in 1.3 seconds on June 22, 1977". This equates to consuming one schooner in 0.3705s. Here we can identify that Steve has managed to bring himself below our theorised rate limit for the 'peristaltic-oesophagus' skoll.
+
+CASCADE RELEVANCE:
+The approximate maximum for a Cascade skoller, that is, the elite of expedient fluid consumption, is ~1.25s for 285ml. This is above the theoretical maximum for peristaltic-oesophagus skolling, however, as outlined in the above section regarding weaknesses of this mathematical model, our calculations above have not included the effects of turbulence: additionally, Cascade skollers must place their empty vessel on their head, and the transition from a stationary vessel to a vertically inverted vessel is not instantaneous.
+
+PARALYTIC-OESOPHAGEAL SKOLLING:
+The following calculations are applicable to those skollers that are able to cease normal peristaltic contractions of their oesophagus, and who are able to hold open both their upper and lower oesophageal sphincters. Excluding excessive turbulence and friction of fluid with the air and oesophageal walls as factors in determining flow rates [ie: the perfect skoll], and including the significant assumptions made previously, the following calculations would be approximately accurate.
+
+First, let us assess this new circumstance:
+1. The rate limiting step would still be the rate of flow in the oesophagus, provided that the skoller is unable to dilate their oesophagus to equal or greater than the average surface area of a schooner.
+2. This new and more superior skoller is able to hold open their oesophagus, and both their upper and lower oesophageal sphincters.
+
+The significance of paralytic-oesophagus skolling is relatively singular: The oesophagus no longer functions as a gravity-independent tube, forcing fluid downwards via motile peristaltic muscular contractions. RATHER: the oesophagus can be theoretically conceived as merely a cylindrical tube, in which the gravitational forces of Newtonian physics apply. This means that the rate at which the oesophagus will clear the oral cavity will be a function increasing exponentially with time; it will be, in essence, much like the function that describes the rate at which fluid originally leaves the vessel.
+
+The surface area of the average oesophagus, working from the previously determined dimensions of a 2.5cm diameter, is approximately 4.91cm^2. The key to finding the fastest possible speed at which the paralytic-oesophagus skoller is able to empty a 285ml schooner is to determine at which point they are capable of removing 125.22ml from their oral cavity [285ml - 159.78ml = 125.22ml; this will be equivalent to the volume that MUST be removed from the oral cavity during the initial delivery of fluid from the vessel, to avoid any spillage].
+
+With some brief mathematical calculations, it can be seen that the paralytic-oesophagus skoller is capable of emptying a 285ml vessel in 0.103s. Of course, as mentioned previously, this does not factor in the time taken for the vessel to be brought to the lips and poured. Nor does it account for the time taken to place the vessel on the head post-skoll. Perhaps the biggest downfall of this model is that it does not account for turbulence - a factor that is feared and respected by any skoller whether elite or novice. Additionally, we may ask ourselves - is it possible to 'throw' the fluid down the oesophagus? By the time it has passed through the oral cavity, could the fluid not have some significant velocity already? If so, what really are the capabilities of man? How far can we push ourselves without causing oesophageal rupture? Is sub-ten possible? Is Bon Jovi 'lus One possible?
+
+FOR THE CASCADE CUP SKOLLER:
+What significance does the above report have for the Cascade Cup fraternity? The author believes that the above estimation, although probably optimistic, highlights:
+1. Not only the possibility of faster individual times for the Cascade Cup skollers,
+But more importantly
+2. The prime importance of teamwork and expedient 'tap-ins.'
+
+If the average team member skolls at 1.5s, the group of eight should theoretically be capable of achieving a final time of ~12s. These are issues that will no doubt be at the forefront in the coming season.

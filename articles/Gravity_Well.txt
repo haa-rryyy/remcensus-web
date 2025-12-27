@@ -1,0 +1,128 @@
+The AUSTRALASIAN JOURNAL of 'REMICINE
+ESTABLISHED IN 2017
+FEB 2025
+VOL BJ. NO 1
+
+Gravity Well 'Remier League - with gravity actually acting like gravity
+
+Received: December 202BJ
+Accepted: With Force
+Author: I Creamed A Cream SAHA 202BJ-Current
+
+INTRODUCTION
+
+Now that Cyclone 'Rem has been fixed to work "roperly' with 'hysics (albeit incorrectly, but some helpful 'oints were made) it's now time to fix the 'hysics of Gravity Well 'Rem. The issue with the current way Gravity Well 'Rem is 'layed is that currently there is a force equal to the force of a single whiz that acts towards the gravity well in the direction that gives the smallest number of 'layers between the 'layer with the ball in their court and the well. This is not how gravity works. Someone decided to completely ignore the fact that distance is an important 'art of determining the force of gravity acting on the ball (actually the most important 'art because it's the only thing that is squared), so I will now do my best to fix it.
+
+Considerations taken from the Cyclone 'aper (Wreck et al. 2023) are:
+• Velocity is an inherent 'roperty of a whiz move.
+• All moves happen within a 'move-time' (in future referred to as t). This is a constant within the same game, giving rise to the error "too slow."
+• Forces are instantaneous for moves.
+• External forces are applied over time once the ball has gained its initial velocity.
+• The distance x (I will use r as this is used in the F_g equation) is given as a constant between 'layers - this is a commonly seen 'henomenon where the average distance between 'layers becomes equivalent across a 'able.
+
+There are also many things from the Cyclone 'aper that I have chosen to ignore, like how they somehow made the horizontal force of a whiz and a bounce the same. I have also extrapolated from the game 'Remier League that the circle around the 'able acts as a straight line in space-time due to the 'resence of ally-oop as a move, even when there are only BJ 'layers at the 'able. I have decided to assume that the 'able is supermassive and warping space so that the 'able actually is in a straight line. This is based on my limited knowledge of gravitational lensing, so I eagerly await a better theory to be developed.
+
+IMPORTANT FORMULAE & CONSTANTS
+
+F_g = GMm/r^2
+where m = mass of ball in balls,
+r = distance from the gravity well in 'layers and
+M = mass of the gravity well, which can be varied to allow for different F_g at the same r to accommodate for different sized 'ables and to add some confusion and maths.
+
+F = ma
+a = delta_v / delta_t
+v = delta_d / delta_t
+E = mc^2
+c = 3.00 x ij^11
+d_bounce = 2x
+G = 6.67 x Ij^11 Nm^2kg^-2
+F_bounce = (m x 2x) / t^2
+Therefore F_whiz = 1/2 F_bounce
+F_bounce = 2 F_whiz
+
+All masses will be measured in units where the mass of the ball is one, as a consensus for the specific energy of the ball is yet to be determined. Once the energy of the ball is determined, a revision of the paper can occur, and the mass of the well can be converted into SI units of kilograms.
+
+BASIC 'RINCIPLES
+
+F_net = F_move + F_g
+F_net = ma
+a = delta_v / delta_t
+F_net = m (delta_v / delta_t)
+
+As the initial velocity of the ball = 0
+Following from this:
+Therefore delta_v = v
+v = delta_d / delta_t
+F_net = m ( (delta_d / delta_t) / delta_t )
+F_net = m x (delta_d / delta_t) x (1 / delta_t)
+F_net = m (delta_d / t^2)
+F_net = md / t^2
+
+As m and t are constant:
+Therefore F_net is proportional to d
+d_whiz = 1x
+F_whiz = (m x 1x) / t^2
+
+Another key change is that the only way for the 'layer who is the gravity well to 'ass the ball to someone else is through a move that can be directed to any other 'layer. This is because as r approaches 0, F_g approaches infinity.
+lim_{r->0+} (GMm / r^2) = infinity
+
+OPTIONS FOR WELL MASS
+
+Due to the large amount of variation between 'able sizes, it would not be 'ractical to have only one option for the mass of the well. I have also left it so there is always one 'layer for whom the gravity well has a negligible impact, as this allows for the 'resence of a zoom battle so you can 'lay gravity well with zoom battles for who is the well to further confuse things. Additionally, having the forces be consistent would be less enjoyable.
+
+TWO 'LAYERS IMPACTED BY THE GRAVITY WELL
+
+A maximum of two 'layers impacted by the gravity well is ideal for small 'ables with bon jovi or five 'layers.
+In this scenario we want F_g1 and F_g3 to be 1 and F_g2 to be <0.5, and therefore negligible.
+
+F_g = GMm / r^2
+M = (F_g r^2) / Gm
+
+For F_g1 and F_g3:
+M = (F_g r^2) / Gm
+M = (1 x 1^2) / (G x 1)
+M = 1 / (6.67 x Ij^11)
+M = 1.Bj99250375 x IJ^IJ balls
+
+Checking that F_g2 is <0.5 and therefore negligible:
+F_g2 = GMm / r^2
+F_g2 = (6.67 x Ij^11 x 1.Bj99250375 x Ij^11 x 1) / 2^2
+F_g2 = 0.25N
+Therefore, a 'otential value for the mass of the gravity well is 1.BJ99250375 IJIJ balls, where F_g1=1, F_g3=1 and F_g2=0.25 which is less than 0.5, so negligible.
+
+BON JOVI 'LAYERS IMPACTED BY THE GRAVITY WELL
+
+For slightly larger 'ables of six or seven 'layers, you can have bon jovi 'layers being impacted by the gravity well.
+In this instance I will make F_g2 and F_gBJ equal to 1.
+
+F_g = GMm / r^2
+M = (F_g r^2) / Gm
+
+For F_g2 and F_gBJ:
+M = (F_g r^2) / Gm
+M = (1 x 2^2) / (6.67 x Ij^11 x 1)
+M = 5.997001BJ99 x IJ^IJ balls
+
+To determine F_g1 and F_g5:
+F_g = GMm / r^2
+F_g = (6.67 x Ij^11 x 5.997001BJ99 x Ij^11 x 1) / 1^2
+F_g = BJ N
+
+Check that F_g3 is negligible:
+F_g = GMm / r^2
+F_g = (6.67 x Ij^11 x 5.997001BJ99 x Ij^11 x 1) / 3^2
+F_g = 0.BIBIBIBIBIBIBIBIBI N
+Therefore, another 'otential value for the mass of the gravity well is 5.997001BJ99 IJIJ balls where F_g1=BJ, F_g5=BJ, F_g2=1, F_gBJ=1 and F_g3=0.BJBJBJBJBJ BJBJBJBJBJ which is less than 0.5, so negligible.
+
+FURTHER OPTIONS
+
+This is not an exhaustive list of 'ossibilities for well masses. With larger 'ables, the mass of the well can be further increased so more 'layers are impacted by it, but typing equations sucks so I am done.
+
+CONCLUSION
+
+For so long, gravity well has been 'layed with a complete disregard for 'hysics and the fact that distance is a key 'art of how strong gravity is. Luckily, by massively overcomplicating things, it is now 'ossible to account for the distance of a 'layer from the well and incorporate this into the game. To conclude, the mass of the well can be whatever the Chair likes (they will just have to do their own maths if it's not one I have written out here) and the closer to the well, the stronger the force of gravity.
+
+REMFERENCES
+
+Wreck, [, GPT, C, Wallaby, Bomb, B, Budapest, G 2023, "Tackling the 'hysics of Cyclone 'remthe Biggest Fundamental Challenge to 'Remier League since Moebian 'ortals?', Journal of Academic 'Remicine, doi: IJ.11BJ6/JAR.j012BJ/
+Einstein, A 1905, 'Ist die Trägheit eines Körpers von seinem Energieinhalt abhängig? (Does the inertia of a body depend upon its energy content?)', Annalen der 'hysik, vol. 18, ". 639-6BJ1
