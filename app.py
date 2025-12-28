@@ -25,25 +25,14 @@ if 'init_done' not in st.session_state:
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
     """Applies specific 'Remier League linguistic and numeric constraints."""
-    
-    # Words starting with P (Replace P/p with 'R/'r)
     text = re.sub(r'\bP(\w+)', r"'R\1", text)
     text = re.sub(r'\bp(\w+)', r"'r\1", text)
-
-    # Terminology Replacements
-    replacements = {
-        "Table": "'able", "table": "'able",
-        "Drink": "'rink", "drink": "'rink"
-    }
+    replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
     for word, replacement in replacements.items():
         text = text.replace(word, replacement)
-
-    # Numeric Substitutions (Ordered from complex to simple to prevent partial matching)
     num_map = [
-        (r"\b444\b", "BJBJBJ"), 
-        (r"\bfour hundred and fourty four\b", "bon jovi hundred and bon jorty bon jovi"),
-        (r"\b888\b", "TKTKTK"), 
-        (r"\beight hundred and eighty eight\b", "takahashi hundred and takahashity takahashi"),
+        (r"\b444\b", "BJBJBJ"), (r"\bfour hundred and fourty four\b", "bon jovi hundred and bon jorty bon jovi"),
+        (r"\b888\b", "TKTKTK"), (r"\beight hundred and eighty eight\b", "takahashi hundred and takahashity takahashi"),
         (r"\b400\b", "BJ00"), (r"\bfour hundred\b", "bon jovi hundred"),
         (r"\b800\b", "TK00"), (r"\beight hundred\b", "takahashi hundred"),
         (r"\b40\b", "BJ0"), (r"\bfourty\b", "bon jorty"),
@@ -54,17 +43,29 @@ def enforce_rem_lexicon(text):
         (r"\b8\b", "TK"), (r"\beight\b", "takahashi"),
         (r"\b10\b", "IJ"), (r"\bten\b", "iku jo")
     ]
-    
     for pattern, sub in num_map:
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
-    
     return text
 
-# --- 3. MODEL SELECTOR ---
-def get_safe_model():
-    """Returns the most stable model ID currently available to resolve 404s."""
-    # Using 'gemini-1.5-flash-latest' is the most robust way to hit a valid 1.5 endpoint.
-    return "models/gemini-1.5-flash-latest"
+# --- 3. DYNAMIC MODEL HANDSHAKE ---
+def get_working_model():
+    """Tries specific modern model IDs to bypass 404 versioning errors."""
+    # Priority list for 2025 stability
+    stable_ids = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-002",
+        "gemini-2.0-flash",
+        "gemini-pro"
+    ]
+    
+    try:
+        available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        for sid in stable_ids:
+            if sid in available:
+                return sid
+        return available[0] if available else "gemini-1.5-flash"
+    except:
+        return "gemini-1.5-flash"
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
@@ -73,61 +74,11 @@ with st.sidebar:
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    active_model = get_safe_model()
+    
+    if 'model_id' not in st.session_state:
+        st.session_state.model_id = get_working_model()
+    st.caption(f"Protocol: {st.session_state.model_id}")
 
 # --- 5. MAIN INTERFACE ---
 st.markdown("## 🦁 'Remcensus")
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the most tone-deaf member of the NHA?")
-
-if query:
-    with st.spinner("🌀 Whizzing..."):
-        try:
-            # 1. Embed Query
-            result = genai.embed_content(model="models/text-embedding-004", content=query)
-            
-            # 2. Search Pinecone (Strictly Local Context)
-            search_results = st.session_state.pc_index.query(
-                vector=result['embedding'], top_k=5, include_metadata=True
-            )
-
-            # 3. Build Context
-            context_text = ""
-            for match in search_results['matches']:
-                meta = match['metadata']
-                context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
-
-            # 4. Generate Answer
-            prompt = f"""
-            SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
-            MANDATE: Answer strictly and exclusively based on the provided context. 
-            If the answer is not contained within the context, respond only with: "Data not found in the archives."
-            DO NOT USE OUTSIDE KNOWLEDGE OR WEB SEARCH.
-            Tone: Clinical, precise, bureaucratic.
-            
-            Context:
-            {context_text}
-            
-            Question: {query}
-            """
-            
-            model = genai.GenerativeModel(active_model)
-            response = model.generate_content(prompt)
-            
-            # 5. Apply Linguistic Transformation
-            final_answer = enforce_rem_lexicon(response.text)
-
-        except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
-            search_results = {'matches': []}
-
-    # --- 6. DISPLAY ---
-    col1, col2 = st.columns([2, 1]) 
-    with col1:
-        st.subheader("📝 Consensus Summary")
-        st.info(final_answer)
-    with col2:
-        st.subheader("📂 Reference Data")
-        if search_results.get('matches'):
-            for match in search_results['matches']:
-                with st.expander(f"📄 {match['metadata'].get('source', 'Doc')}"):
-                    st.write(match['metadata'].get('text', '')[:300] + "...")
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the
