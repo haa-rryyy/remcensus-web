@@ -25,19 +25,11 @@ if 'init_done' not in st.session_state:
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
     """Applies specific 'Remier League linguistic and numeric constraints."""
-    # Words starting with P (Replace P/p with apostrophe only)
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
-
-    # Terminology Replacements
-    replacements = {
-        "Table": "'able", "table": "'able",
-        "Drink": "'rink", "drink": "'rink"
-    }
+    replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
     for word, replacement in replacements.items():
         text = text.replace(word, replacement)
-
-    # Numeric Substitutions
     num_map = [
         (r"\b444\b", "BJBJBJ"), (r"\bfour hundred and fourty four\b", "bon jovi hundred and bon jorty bon jovi"),
         (r"\b888\b", "TKTKTK"), (r"\beight hundred and eighty eight\b", "takahashi hundred and takahashity takahashi"),
@@ -55,13 +47,15 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. DYNAMIC MODEL HANDSHAKE ---
+# --- 3. HARDENED MODEL SELECTOR ---
 def get_working_model():
-    """Prioritizes 1.5-flash series for stability and higher free-tier quotas."""
-    # 2.5-flash is removed to avoid the 429 quota traps encountered.
+    """Explicitly excludes 2.5 models to maintain 1,500 RPD quota."""
     stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-pro"]
     try:
         available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Filter out 2.5 models from available list entirely
+        available = [m for m in available if "2.5" not in m]
+        
         for sid in stable_ids:
             if sid in available: return sid
         return available[0] if available else "gemini-1.5-flash"
@@ -75,8 +69,8 @@ with st.sidebar:
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    if 'model_id' not in st.session_state:
-        st.session_state.model_id = get_working_model()
+    # Force a re-check of the model if it was stuck on 2.5
+    st.session_state.model_id = get_working_model()
     st.caption(f"Protocol: {st.session_state.model_id}")
 
 # --- 5. MAIN INTERFACE ---
@@ -96,23 +90,20 @@ if query:
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
             model = genai.GenerativeModel(st.session_state.model_id)
-            
             prompt = f"""
             SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
             MANDATE: If the user provides a direct task (like writing a list), execute it precisely. 
             If the user asks a question, answer strictly based on the provided context.
-            If context is required but missing, say "Data not found in the archives."
             Tone: Clinical, precise, bureaucratic.
             
             Context: {context_text}
             Question/Task: {query}
             """
-            
             response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
         except Exception as e:
             if "429" in str(e):
-                final_answer = "⚠️ System Error: Daily/Minute Quota exceeded. Please wait 60 seconds or try again later."
+                final_answer = "⚠️ System Error: Daily/Minute Quota exceeded. Please wait 60 seconds."
             else:
                 final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
