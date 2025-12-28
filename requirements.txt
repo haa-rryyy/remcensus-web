@@ -2,3 +2,4 @@ streamlit
 google-generativeai
 groq
 pinecone>=6.0.0
+huggingface_hub
