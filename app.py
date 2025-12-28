@@ -47,15 +47,18 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. HARDENED MODEL SELECTOR ---
+# --- 3. STABLE CHANNEL MODEL SELECTOR ---
 def get_working_model():
-    """Explicitly excludes 2.5 models to maintain 1,500 RPD quota."""
+    """Strictly filters out experimental and 2.x models to maintain high quota."""
     stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-pro"]
     try:
-        available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # Filter out 2.5 models from available list entirely
-        available = [m for m in available if "2.5" not in m]
+        # Get raw list
+        raw_available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
+        # Filter: No 2.0, No 2.5, No experimental tags
+        available = [m for m in raw_available if not any(x in m for x in ["2.0", "2.5", "exp"])]
+        
+        # Match against our preferred stable list
         for sid in stable_ids:
             if sid in available: return sid
         return available[0] if available else "gemini-1.5-flash"
@@ -69,7 +72,7 @@ with st.sidebar:
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    # Force a re-check of the model if it was stuck on 2.5
+    # Reset session state for model selection to clear the experimental choice
     st.session_state.model_id = get_working_model()
     st.caption(f"Protocol: {st.session_state.model_id}")
 
