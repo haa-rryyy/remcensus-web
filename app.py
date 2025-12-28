@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai as google_genai
 from groq import Groq
 from huggingface_hub import InferenceClient
 from pinecone import Pinecone
@@ -18,7 +18,9 @@ if 'init_done' not in st.session_state:
     try:
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        genai.configure(api_key=st.secrets["GEMINI_KEY"])
+        
+        # Modern Google SDK Client
+        st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
         st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
         st.session_state.init_done = True
@@ -65,7 +67,7 @@ SYSTEM_PROMPT = (
 
 # --- 4. TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
-    # PRIMARY: GROQ
+    # ATTEMPT 1: GROQ
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
@@ -73,16 +75,16 @@ def generate_response(context, query):
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)"
     except Exception as e_groq:
-        # SECONDARY: GEMINI
+        # ATTEMPT 2: GEMINI (Using modern SDK)
         try:
-            model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=SYSTEM_PROMPT
+            response = st.session_state.google_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=f"Context: {context}\n\nQuestion: {query}",
+                config={'system_instruction': SYSTEM_PROMPT}
             )
-            response = model.generate_content(f"Context: {context}\n\nQuestion: {query}")
             return response.text, "Gemini (1.5 Flash)"
         except Exception as e_gem:
-            # TERTIARY: HUGGING FACE
+            # ATTEMPT 3: HUGGING FACE
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="HuggingFaceH4/zephyr-7b-beta",
@@ -91,7 +93,7 @@ def generate_response(context, query):
                 )
                 return response.choices[0].message.content, "Hugging Face (Zephyr-7B)"
             except Exception as e_hf:
-                return f"⚠️ SYSTEM FAILURE: All protocols failed. Errors recorded.", "OFFLINE"
+                return f"⚠️ SYSTEM FAILURE: All protocols failed. Errors recorded in logs.", "OFFLINE"
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
@@ -102,8 +104,18 @@ query = st.text_input("Enter Query Parameters:", placeholder="Querying the archi
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
-            result = genai.embed_content(model="models/text-embedding-004", content=query)
-            search_results = st.session_state.pc_index.query(vector=result['embedding'], top_k=5, include_metadata=True)
+            # Modern SDK Embedding call
+            result = st.session_state.google_client.models.embed_content(
+                model="text-embedding-004",
+                contents=query
+            )
+            
+            search_results = st.session_state.pc_index.query(
+                vector=result.embeddings[0].values, 
+                top_k=5, 
+                include_metadata=True
+            )
+            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
