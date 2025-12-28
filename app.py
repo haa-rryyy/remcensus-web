@@ -18,8 +18,6 @@ if 'init_done' not in st.session_state:
     try:
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        
-        # Modern Google SDK Client
         st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
         st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
@@ -49,7 +47,6 @@ def enforce_rem_lexicon(text):
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT ---
-# Standardized across all engines based on Beginner CurRemculum and Rem Rules
 SYSTEM_PROMPT = (
     "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
     "TIER 1: PERMITTED\n"
@@ -66,11 +63,11 @@ SYSTEM_PROMPT = (
     "Action: Respond ONLY with: 'rink and learn."
 )
 
-# --- 4. TRIPLE-ENGINE HANDLER ---
+# --- 4. DYNAMIC MULTI-ENGINE HANDLER ---
 def generate_response(context, query):
     debug_logs = []
     
-    # ATTEMPT 1: GROQ
+    # ATTEMPT 1: GROQ (Discovery)
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
@@ -78,10 +75,11 @@ def generate_response(context, query):
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)", debug_logs
     except Exception as e:
-        debug_logs.append(f"Groq Error: {str(e)}")
+        debug_logs.append(f"Groq Failure: {str(e)}")
         
-        # ATTEMPT 2: GEMINI (Corrected model ID for google-genai SDK)
+        # ATTEMPT 2: GEMINI (Auto-ID Correction)
         try:
+            # Using stable identifier string for modern SDK
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=f"Context: {context}\n\nQuestion: {query}",
@@ -89,41 +87,38 @@ def generate_response(context, query):
             )
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
-            debug_logs.append(f"Gemini Error: {str(e_gem)}")
+            debug_logs.append(f"Gemini Failure: {str(e_gem)}")
             
-            # ATTEMPT 3: HUGGING FACE (Using stable Mistral-7B)
+            # ATTEMPT 3: HF (Vetted Chat Model)
             try:
                 response = st.session_state.hf_client.chat_completion(
-                    model="mistralai/Mistral-7B-Instruct-v0.3",
+                    model="meta-llama/Llama-3.2-3B-Instruct",
                     messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=500
                 )
-                return response.choices[0].message.content, "Hugging Face (Mistral)", debug_logs
+                return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
             except Exception as e_hf:
-                debug_logs.append(f"HF Error: {str(e_hf)}")
+                debug_logs.append(f"HF Failure: {str(e_hf)}")
                 return "⚠️ SYSTEM FAILURE: All protocols failed.", "OFFLINE", debug_logs
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
-st.sidebar.success("✅ Triple-Engine Cascade Active")
+st.sidebar.success("✅ Dynamic Failover Active")
 
 query = st.text_input("Enter Query Parameters:", placeholder="Querying the archives...")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
-            # Modern SDK Embedding call
             result = st.session_state.google_client.models.embed_content(
                 model="text-embedding-004",
                 contents=query
             )
-            
             search_results = st.session_state.pc_index.query(
                 vector=result.embeddings[0].values, 
                 top_k=5, 
                 include_metadata=True
             )
-            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
@@ -131,14 +126,11 @@ if query:
             
             raw_text, engine_used, logs = generate_response(context_text, query)
             final_answer = enforce_rem_lexicon(raw_text)
-            
             st.caption(f"Generated via: {engine_used}")
             st.info(final_answer)
-            
             if engine_used == "OFFLINE":
                 with st.expander("🛠 Diagnostic Logs"):
                     for log in logs:
                         st.code(log)
-                        
         except Exception as e:
             st.error(f"⚠️ Critical Error: {e}")
