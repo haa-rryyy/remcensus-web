@@ -286,18 +286,18 @@ def fetch_drive_recent_files(drive_id, top_k=5):
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.   Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.    Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
         logger.info(f"Fetching recent files from drive/folder {drive_id}...")
         
-        # First, try to query files within the folder/drive
+        # Query files within the folder/drive
         resp = drive_service.files().list(
             q=f"'{drive_id}' in parents and trashed=false",
             spaces='drive',
             orderBy="createdTime desc",
             pageSize=top_k,
-            fields="files(id,name,createdTime,modifiedTime,owners(mimeType,displayName,emailAddress),mimeType,webViewLink,size,description)"
+            fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)"
         ).execute()
         
         files = resp.get("files", [])
@@ -310,13 +310,13 @@ def fetch_drive_recent_files(drive_id, top_k=5):
                     dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
                     f["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger.warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
+                    logger. warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
                     f["createdTimeISO"] = f. get("createdTime")
         
         return files
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive files: {e. resp.status} - {e.content}")
+        logger. error(f"HTTP error fetching drive files: {e. resp.status} - {e. content}")
         raise
     except GoogleAPICallError as e:
         logger. error(f"Google API error fetching drive files: {str(e)}")
