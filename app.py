@@ -49,8 +49,9 @@ def enforce_rem_lexicon(text):
 
 # --- 3. DYNAMIC MODEL HANDSHAKE ---
 def get_working_model():
-    """Tries specific modern model IDs to bypass 404 versioning errors."""
-    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-2.0-flash", "gemini-pro"]
+    """Prioritizes 1.5-flash to avoid 429 quota errors common with 2.0 models."""
+    # We prioritize 1.5-flash as it has the highest quota for free users
+    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-pro"]
     try:
         available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for sid in stable_ids:
@@ -85,11 +86,15 @@ if query:
             for match in search_results['matches']:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
+            
             model = genai.GenerativeModel(st.session_state.model_id)
             response = model.generate_content(f"SYSTEM: Librarian Persona. Context: {context_text} Question: {query}")
             final_answer = enforce_rem_lexicon(response.text)
         except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
+            if "429" in str(e):
+                final_answer = "⚠️ System Error: Quota exceeded. Please wait 60 seconds."
+            else:
+                final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
