@@ -48,60 +48,50 @@ def enforce_rem_lexicon(text):
 
 # --- 3. UNIVERSAL SYSTEM PROMPT ---
 SYSTEM_PROMPT = (
-    "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers and respond accordingly.\n\n"
-    "TIER 1: PERMITTED (Didactic Teaching Allowed)\n"
+    "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
+    "TIER 1: PERMITTED\n"
     "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
     "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
-    "Etiquette (Meeting, Chair, Timing, Vocalisation, Courts).\n"
+    "Etiquette (Meeting, Chair, Timing, Vocalisation).\n"
     "Action: Explain clinically based on context.\n\n"
-    "TIER 2: ONTOLOGICAL (Definitions Only)\n"
-    "Topics: Abstract definitions of 'a move', 'a game', 'a court', or 'a variation'.\n"
-    "Action: Define WHAT it is. Refuse HOW it works. If procedure is asked -> Tier 3.\n\n"
-    "TIER 3: RESTRICTED (Strict Silence)\n"
-    "Topics: \n"
-    "- Whiz Moves: Botsquali (Bsq), Beelze-bub-bub-bub (Bb), Bop, Alpha.\n"
-    "- Chow Moves: Kumquat (Kq), Kumquat support (Kqs).\n"
-    "- Takahashi Numbers: Bon Jovi (4), Takahashi (8), Number 9, Iku Jo (10).\n"
-    "- Games: Zoom, Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption.\n"
-    "- Any named variation not in Tier 1.\n"
-    "Action: Respond ONLY with the phrase: 'rink and learn."
+    "TIER 2: ONTOLOGICAL\n"
+    "Topics: Abstract definitions of 'a move', 'a game', or 'a court'.\n"
+    "Action: Define WHAT it is. Refuse HOW it works.\n\n"
+    "TIER 3: RESTRICTED\n"
+    "Topics: Botsquali, Beelze-bub-bub-bub, Bop, Kumquat, Zoom, "
+    "Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption, numbers 4, 8, 9, 10.\n"
+    "Action: Respond ONLY with: 'rink and learn."
 )
 
 # --- 4. TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
-    # ATTEMPT 1: GROQ
+    # PRIMARY: GROQ
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
-            ],
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
             model="llama-3.3-70b-versatile",
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)"
     except Exception as e_groq:
-        # ATTEMPT 2: GEMINI (Syntax Audited)
+        # SECONDARY: GEMINI
         try:
             model = genai.GenerativeModel(
-                model_name="models/gemini-1.5-flash",
+                model_name="gemini-1.5-flash",
                 system_instruction=SYSTEM_PROMPT
             )
             response = model.generate_content(f"Context: {context}\n\nQuestion: {query}")
             return response.text, "Gemini (1.5 Flash)"
         except Exception as e_gem:
-            # ATTEMPT 3: HUGGING FACE
+            # TERTIARY: HUGGING FACE
             try:
                 response = st.session_state.hf_client.chat_completion(
-                    model="mistralai/Mistral-7B-Instruct-v0.3",
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
-                    ],
+                    model="HuggingFaceH4/zephyr-7b-beta",
+                    messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=500
                 )
-                return response.choices[0].message.content, "Hugging Face (Mistral-7B)"
+                return response.choices[0].message.content, "Hugging Face (Zephyr-7B)"
             except Exception as e_hf:
-                return f"⚠️ SYSTEM FAILURE: All protocols failed. Groq: {e_groq}. Gemini: {e_gem}. HF: {e_hf}.", "OFFLINE"
+                return f"⚠️ SYSTEM FAILURE: All protocols failed. Errors recorded.", "OFFLINE"
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
