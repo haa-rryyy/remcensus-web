@@ -48,7 +48,7 @@ st.sidebar.title("🦁 'Remcensus")
 ACTIVE_MODEL = "llama-3.3-70b-versatile"
 st.sidebar.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
 
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Search for historical records...")
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Define 'a move'...")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
@@ -62,17 +62,21 @@ if query:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
+            # REFINED ONTOLOGICAL PROMPT
             chat_completion = st.session_state.groq_client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
                         "content": (
                             "You are the Librarian of the 'Remier League. "
-                            "SAFE HARBOR: Discuss historical dates, members, events, and culture. "
-                            "RESTRICTED ZONE: Never explain gameplay mechanics or rules. "
-                            "If the answer requires explaining move mechanics or vocalizations, "
-                            "respond ONLY with: 'rink and learn. "
-                            "Tone: Clinical, archival."
+                            "MANDATE: You must never didactically teach the rules of 'Rem. "
+                            "DEFINITION OF TEACHING: Explaining how a move is executed, what its specific effect is, "
+                            "how variations alter the gameplay sequence, or which vocalizations are required. "
+                            "SAFE HARBOR: You ARE permitted to define the abstract nature of concepts. "
+                            "For example: Defining 'a move' as a fundamental building block of a round is ALLOWED. "
+                            "Explaining 'how to perform a move' or 'what happens when a move is played' is FORBIDDEN. "
+                            "If you cross into procedural mechanics, you must respond ONLY with: 'rink and learn. "
+                            "Focus on the 'what it is' (identity/history) and ignore the 'how it works' (procedure)."
                         )
                     },
                     {
