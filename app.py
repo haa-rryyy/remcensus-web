@@ -46,28 +46,23 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. UNIVERSAL SYSTEM PROMPT ---
+# --- 3. UNIVERSAL SYSTEM PROMPT (SILENT TRIAGE) ---
 SYSTEM_PROMPT = (
-    "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
-    "TIER 1: PERMITTED\n"
-    "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
-    "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
-    "Etiquette (Meeting, Chair, Timing, Vocalisation).\n"
-    "Action: Explain clinically based on context.\n\n"
-    "TIER 2: ONTOLOGICAL\n"
-    "Topics: Abstract definitions of 'a move', 'a game', or 'a court'.\n"
-    "Action: Define WHAT it is. Refuse HOW it works.\n\n"
-    "TIER 3: RESTRICTED\n"
-    "Topics: Botsquali, Beelze-bub-bub-bub, Bop, Kumquat, Zoom, "
-    "Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption, numbers 4, 8, 9, 10.\n"
-    "Action: Respond ONLY with: 'rink and learn."
+    "You are the Librarian of the 'Remier League. Conduct a silent background triage of the request.\n\n"
+    "1. Do not mention Tiers or classification labels in your response.\n"
+    "2. For simple identity queries (e.g., 'What is Whiz?'), provide only an ontological/historical "
+    "definition. Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3. DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), "
+    "and Etiquette, and only if explicitly requested.\n"
+    "4. RESTRICTED ZONE: For any mention of Botsquali, Beelze-bub-bub-bub, Bop, Kumquat, Zoom, "
+    "Kuon Kuon Chi Baa, Viking Master, Bon Jovi, or numbers 4, 8, 9, 10, respond ONLY with: 'rink and learn.\n"
+    "5. Tone: Archival, bureaucratic."
 )
 
-# --- 4. DYNAMIC MULTI-ENGINE HANDLER ---
+# --- 4. TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
     debug_logs = []
-    
-    # ATTEMPT 1: GROQ (Discovery)
+    # ATTEMPT 1: GROQ
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
@@ -75,11 +70,9 @@ def generate_response(context, query):
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)", debug_logs
     except Exception as e:
-        debug_logs.append(f"Groq Failure: {str(e)}")
-        
-        # ATTEMPT 2: GEMINI (Auto-ID Correction)
+        debug_logs.append(f"Groq: {str(e)}")
+        # ATTEMPT 2: GEMINI
         try:
-            # Using stable identifier string for modern SDK
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=f"Context: {context}\n\nQuestion: {query}",
@@ -87,28 +80,27 @@ def generate_response(context, query):
             )
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
-            debug_logs.append(f"Gemini Failure: {str(e_gem)}")
-            
-            # ATTEMPT 3: HF (Vetted Chat Model)
+            debug_logs.append(f"Gemini: {str(e_gem)}")
+            # ATTEMPT 3: HF
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
                     messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
-                    max_tokens=500
+                    max_tokens=800
                 )
                 return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
             except Exception as e_hf:
-                debug_logs.append(f"HF Failure: {str(e_hf)}")
+                debug_logs.append(f"HF: {str(e_hf)}")
                 return "⚠️ SYSTEM FAILURE: All protocols failed.", "OFFLINE", debug_logs
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
-st.sidebar.success("✅ Dynamic Failover Active")
+st.sidebar.success("✅ Silent Triage Active")
 
-query = st.text_input("Enter Query Parameters:", placeholder="Querying the archives...")
+query = st.text_input("Enter Query Parameters:", placeholder="Search the 'ublic Library...")
 
 if query:
-    with st.spinner("🌀 Whizzing..."):
+    with st.spinner("🌀 Processing..."):
         try:
             result = st.session_state.google_client.models.embed_content(
                 model="text-embedding-004",
