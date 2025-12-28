@@ -101,7 +101,7 @@ def initialize_drive_service():
         # Step 3: Create service account credentials
         logger.info("Creating service account credentials...")
         try:
-            scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly']
+            scopes = ['https://www.googleapis.com/auth/drive']
             logger.debug(f"Using scopes: {scopes}")
             
             credentials = Credentials. from_service_account_info(
