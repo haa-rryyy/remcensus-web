@@ -25,11 +25,20 @@ if 'init_done' not in st.session_state:
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
     """Applies specific 'Remier League linguistic and numeric constraints."""
-    text = re.sub(r'\bP(\w+)', r"'R\1", text)
-    text = re.sub(r'\bp(\w+)', r"'r\1", text)
-    replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
+    
+    # Words starting with P (Replace P/p with apostrophe only)
+    text = re.sub(r'\bP', "'", text)
+    text = re.sub(r'\bp', "'", text)
+
+    # Terminology Replacements
+    replacements = {
+        "Table": "'able", "table": "'able",
+        "Drink": "'rink", "drink": "'rink"
+    }
     for word, replacement in replacements.items():
         text = text.replace(word, replacement)
+
+    # Numeric Substitutions
     num_map = [
         (r"\b444\b", "BJBJBJ"), (r"\bfour hundred and fourty four\b", "bon jovi hundred and bon jorty bon jovi"),
         (r"\b888\b", "TKTKTK"), (r"\beight hundred and eighty eight\b", "takahashi hundred and takahashity takahashi"),
@@ -49,8 +58,6 @@ def enforce_rem_lexicon(text):
 
 # --- 3. DYNAMIC MODEL HANDSHAKE ---
 def get_working_model():
-    """Prioritizes 1.5-flash to avoid 429 quota errors common with 2.0 models."""
-    # We prioritize 1.5-flash as it has the highest quota for free users
     stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-pro"]
     try:
         available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -88,13 +95,23 @@ if query:
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
             model = genai.GenerativeModel(st.session_state.model_id)
-            response = model.generate_content(f"SYSTEM: Librarian Persona. Context: {context_text} Question: {query}")
+            
+            # Adjusted Prompt to allow direct tasks while prioritizing context
+            prompt = f"""
+            SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
+            MANDATE: If the user provides a direct task (like writing a list), execute it precisely. 
+            If the user asks a question, answer strictly based on the provided context.
+            If context is required but missing, say "Data not found in the archives."
+            Tone: Clinical, precise, bureaucratic.
+            
+            Context: {context_text}
+            Question/Task: {query}
+            """
+            
+            response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
         except Exception as e:
-            if "429" in str(e):
-                final_answer = "⚠️ System Error: Quota exceeded. Please wait 60 seconds."
-            else:
-                final_answer = f"⚠️ System Error: {e}"
+            final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
