@@ -47,20 +47,18 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. STABLE CHANNEL MODEL SELECTOR ---
+# --- 3. STRICT GEMINI SELECTOR ---
 def get_working_model():
-    """Strictly filters out experimental and 2.x models to maintain high quota."""
-    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-pro"]
+    """Bypasses Gemma and experimental models to force Gemini 1.5 high-quota channel."""
+    preferred = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001"]
     try:
-        # Get raw list
         raw_available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # Filter: No 2.0, No 2.5, No experimental tags
-        available = [m for m in raw_available if not any(x in m for x in ["2.0", "2.5", "exp"])]
+        # Filter: Strictly Gemini 1.5 series to ensure 1,500 RPD
+        available = [m for m in raw_available if m.startswith("gemini-1.5")]
         
-        # Match against our preferred stable list
-        for sid in stable_ids:
-            if sid in available: return sid
+        for p in preferred:
+            if p in available: return p
         return available[0] if available else "gemini-1.5-flash"
     except:
         return "gemini-1.5-flash"
@@ -72,7 +70,6 @@ with st.sidebar:
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    # Reset session state for model selection to clear the experimental choice
     st.session_state.model_id = get_working_model()
     st.caption(f"Protocol: {st.session_state.model_id}")
 
