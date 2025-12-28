@@ -47,58 +47,33 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. AUTO-RECOVERY MODEL SELECTOR ---
-def get_verified_model():
-    """Programmatically finds the first available valid model for the current API key."""
-    try:
-        # Get all models that support content generation
-        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Prioritize stable Gemini models
-        priority = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
-        for p in priority:
-            if p in valid_models:
-                return p
-        
-        # Fallback to the first available if priority fails
-        return valid_models[0] if valid_models else "gemini-1.5-flash"
-    except Exception:
-        return "gemini-1.5-flash"
-
-# --- 4. SIDEBAR ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.title("🦁 'Remcensus")
     st.caption("Archives of the 'ublic Library of the RACRL")
     st.markdown("---")
     st.success("✅ System Online")
-    
-    if 'active_model' not in st.session_state:
-        st.session_state.active_model = get_verified_model()
-    
-    st.caption(f"Protocol: {st.session_state.active_model}")
+    # Using the most current stable alias to bypass 404/429 loops
+    ACTIVE_MODEL = "gemini-flash-latest"
+    st.caption(f"Protocol: {ACTIVE_MODEL}")
 
-# --- 5. MAIN INTERFACE ---
+# --- 4. MAIN INTERFACE ---
 st.markdown("## 🦁 'Remcensus")
 query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the most tone-deaf member of the NHA?")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
-            # 1. Embedding (Targeting stable path)
             result = genai.embed_content(model="models/text-embedding-004", content=query)
-            
-            # 2. Retrieval
             search_results = st.session_state.pc_index.query(
                 vector=result['embedding'], top_k=5, include_metadata=True
             )
-            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
-            # 3. Generation using the verified model
-            model = genai.GenerativeModel(st.session_state.active_model)
+            model = genai.GenerativeModel(ACTIVE_MODEL)
             prompt = f"SYSTEM: Librarian Persona. Context: {context_text} Question: {query}"
             response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
