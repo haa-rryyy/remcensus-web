@@ -62,8 +62,9 @@ def enforce_rem_lexicon(text):
 
 # --- 3. MODEL SELECTOR ---
 def get_safe_model():
-    """Forces the use of a standard model to resolve 404 errors."""
-    return "models/gemini-1.5-flash"
+    """Returns the most stable model ID currently available to resolve 404s."""
+    # Using 'gemini-1.5-flash-latest' is the most robust way to hit a valid 1.5 endpoint.
+    return "models/gemini-1.5-flash-latest"
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
