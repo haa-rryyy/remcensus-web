@@ -38,28 +38,30 @@ def enforce_rem_lexicon(text):
         (r"\b400\b", "BJ00"), (r"\b800\b", "TK00"),
         (r"\b40\b", "BJ0"), (r"\b80\b", "TK0"),
         (r"\b14\b", "1BJ"), (r"\b18\b", "1TK"),
-        (r"\b4\b", "BJ"), (r"\b8\b", "TK"),
-        (r"\b10\b", "IJ")
+        (r"\b4\b", "BJ"), (r"\bfour\b", "bon jovi"),
+        (r"\b8\b", "TK"), (r"\beight\b", "takahashi"),
+        (r"\b10\b", "IJ"), (r"\bten\b", "iku jo")
     ]
     for pattern, sub in num_map:
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT ---
+[cite_start]# [cite: 16, 17, 19, 61, 263, 265, 268, 277, 281, 288, 298, 305]
 SYSTEM_PROMPT = (
     "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
     "TIER 1: PERMITTED\n"
-    "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
-    "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
-    [cite_start]"Etiquette (Meeting, Chair, Timing, Vocalisation, Courts)[cite: 20, 21, 37, 42, 45, 53].\n"
-    [cite_start]"Action: Explain clinically[cite: 19].\n\n"
+    [cite_start]"Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop) [cite: 254, 255, 257, 258][cite_start], Basic Antlers[cite: 270, 271, 272], "
+    [cite_start]"Basic Chow-Chow-Bang (Chow, Bang) [cite: 275, 276][cite_start], Takahashi (Numbers 1-3, 5-7)[cite: 280, 282], "
+    [cite_start]"Etiquette (Meeting, Chair, Timing, Vocalisation, Courts)[cite: 23, 25, 27, 29, 31, 35].\n"
+    "Action: Explain clinically.\n\n"
     "TIER 2: ONTOLOGICAL\n"
     "Topics: Abstract definitions of 'a move', 'a game', or 'a court'.\n"
     "Action: Define WHAT it is. Refuse HOW it works.\n\n"
     "TIER 3: RESTRICTED\n"
-    "Topics: Botsquali, Beelze-bub-bub-bub, Bop, Kumquat, Zoom, Kuon Kuon Chi Baa, "
-    [cite_start]"Viking Master, Bon Jovi, Full vessel consumption, numbers 4, 8, 9, 10[cite: 40, 41, 52, 57, 58, 62, 63, 64, 65, 66, 263, 265, 268, 277, 281, 288, 298, 305].\n"
-    [cite_start]"Action: Respond ONLY with: 'rink and learn[cite: 13, 14, 18]."
+    [cite_start]"Topics: Botsquali [cite: 264][cite_start], Beelze-bub-bub-bub [cite: 262][cite_start], Bop [cite: 266][cite_start], Kumquat [cite: 276][cite_start], Zoom[cite: 289], "
+    [cite_start]"Kuon Kuon Chi Baa [cite: 299][cite_start], Viking Master [cite: 306][cite_start], Bon Jovi [cite: 280, 281][cite_start], Full vessel consumption [cite: 66][cite_start], numbers 4, 8, 9, 10[cite: 57, 58, 280, 281, 283].\n"
+    "Action: Respond ONLY with: 'rink and learn."
 )
 
 # --- 4. STABILIZED TRIPLE-ENGINE HANDLER ---
@@ -72,13 +74,16 @@ def generate_response(context, query):
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)"
     except Exception as e_groq:
-        # SECONDARY: GEMINI (Corrected path)
+        # SECONDARY: GEMINI (Fixed Syntax with Comma)
         try:
-            model = genai.GenerativeModel("models/gemini-1.5-flash", system_instruction=SYSTEM_PROMPT)
+            model = genai.GenerativeModel(
+                model_name="models/gemini-1.5-flash",
+                system_instruction=SYSTEM_PROMPT
+            )
             response = model.generate_content(f"Context: {context}\n\nQuestion: {query}")
             return response.text, "Gemini (1.5 Flash)"
         except Exception as e_gem:
-            # TERTIARY: HUGGING FACE (Chat-native model)
+            # TERTIARY: HUGGING FACE
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="mistralai/Mistral-7B-Instruct-v0.3",
