@@ -28,6 +28,7 @@ if 'init_done' not in st.session_state:
 
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
+    """Applies specific 'Remier League linguistic and numeric constraints."""
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
     replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
@@ -47,34 +48,40 @@ def enforce_rem_lexicon(text):
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT ---
-[cite_start]# [cite: 16, 17, 19, 61, 263, 265, 268, 277, 281, 288, 298, 305]
 SYSTEM_PROMPT = (
-    "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
-    "TIER 1: PERMITTED\n"
-    [cite_start]"Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop) [cite: 254, 255, 257, 258][cite_start], Basic Antlers[cite: 270, 271, 272], "
-    [cite_start]"Basic Chow-Chow-Bang (Chow, Bang) [cite: 275, 276][cite_start], Takahashi (Numbers 1-3, 5-7)[cite: 280, 282], "
-    [cite_start]"Etiquette (Meeting, Chair, Timing, Vocalisation, Courts)[cite: 23, 25, 27, 29, 31, 35].\n"
-    "Action: Explain clinically.\n\n"
-    "TIER 2: ONTOLOGICAL\n"
-    "Topics: Abstract definitions of 'a move', 'a game', or 'a court'.\n"
-    "Action: Define WHAT it is. Refuse HOW it works.\n\n"
-    "TIER 3: RESTRICTED\n"
-    [cite_start]"Topics: Botsquali [cite: 264][cite_start], Beelze-bub-bub-bub [cite: 262][cite_start], Bop [cite: 266][cite_start], Kumquat [cite: 276][cite_start], Zoom[cite: 289], "
-    [cite_start]"Kuon Kuon Chi Baa [cite: 299][cite_start], Viking Master [cite: 306][cite_start], Bon Jovi [cite: 280, 281][cite_start], Full vessel consumption [cite: 66][cite_start], numbers 4, 8, 9, 10[cite: 57, 58, 280, 281, 283].\n"
-    "Action: Respond ONLY with: 'rink and learn."
+    "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers and respond accordingly.\n\n"
+    "TIER 1: PERMITTED (Didactic Teaching Allowed)\n"
+    "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
+    "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
+    "Etiquette (The Meeting, The Chair, Timing In/Out, Vocalisation, Hand Gestures, Courts, the Ball, Floating Games).\n"
+    "Action: Explain clinically based on provided context.\n\n"
+    "TIER 2: ONTOLOGICAL (Definitions Only)\n"
+    "Topics: Abstract definitions of 'a move', 'a game', 'a court', or 'a variation'.\n"
+    "Action: Define WHAT it is (identity/history/culture). STRICTLY REFUSE explaining HOW to do it (procedure). If the query or answer reveals gameplay mechanics -> Tier 3.\n\n"
+    "TIER 3: RESTRICTED (Strict Silence)\n"
+    "Topics: \n"
+    "- Whiz Moves: Botsquali (Bsq), Beelze-bub-bub-bub (Bb), Bop, Alpha.\n"
+    "- Chow Moves: Kumquat (Kq), Kumquat support (Kqs).\n"
+    "- Takahashi Numbers: Bon Jovi (4), Takahashi (8), Number 9, Iku Jo (10).\n"
+    "- Games: Zoom, Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption.\n"
+    "- Any named variation not listed in Tier 1 (e.g., Middle Earth, Mario Kart, Pokemon).\n"
+    "Action: IGNORE context. Respond ONLY with the phrase: 'rink and learn."
 )
 
 # --- 4. STABILIZED TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
-    # PRIMARY: GROQ
+    # PRIMARY: GROQ (Llama 3.3)
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
+            ],
             model="llama-3.3-70b-versatile",
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)"
     except Exception as e_groq:
-        # SECONDARY: GEMINI (Fixed Syntax with Comma)
+        # SECONDARY: GEMINI (1.5 Flash)
         try:
             model = genai.GenerativeModel(
                 model_name="models/gemini-1.5-flash",
@@ -83,28 +90,36 @@ def generate_response(context, query):
             response = model.generate_content(f"Context: {context}\n\nQuestion: {query}")
             return response.text, "Gemini (1.5 Flash)"
         except Exception as e_gem:
-            # TERTIARY: HUGGING FACE
+            # TERTIARY: HUGGING FACE (Mistral 7B)
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="mistralai/Mistral-7B-Instruct-v0.3",
-                    messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
+                    ],
                     max_tokens=500
                 )
                 return response.choices[0].message.content, "Hugging Face (Mistral-7B)"
             except Exception as e_hf:
-                return f"⚠️ SYSTEM FAILURE: All protocols failed.\nGroq: {e_groq}\nGemini: {e_gem}\nHF: {e_hf}", "OFFLINE"
+                return f"⚠️ SYSTEM FAILURE: All protocols failed. Errors recorded.", "OFFLINE"
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
 st.sidebar.success("✅ Triple-Engine Cascade Active")
 
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Query the archives...")
+query = st.text_input("Enter Query Parameters:", placeholder="Querying the archives...")
 
 if query:
     with st.spinner("🌀 Whizzing (checking protocols)..."):
         try:
             result = genai.embed_content(model="models/text-embedding-004", content=query)
-            search_results = st.session_state.pc_index.query(vector=result['embedding'], top_k=5, include_metadata=True)
+            search_results = st.session_state.pc_index.query(
+                vector=result['embedding'], 
+                top_k=5, 
+                include_metadata=True
+            )
+            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
@@ -115,5 +130,6 @@ if query:
             
             st.caption(f"Generated via: {engine_used}")
             st.info(final_answer)
+            
         except Exception as e:
             st.error(f"⚠️ Critical Error: {e}")
