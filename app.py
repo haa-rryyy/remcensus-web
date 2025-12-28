@@ -48,7 +48,7 @@ st.sidebar.title("🦁 'Remcensus")
 ACTIVE_MODEL = "llama-3.3-70b-versatile"
 st.sidebar.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
 
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Define 'a move'...")
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Query the archives...")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
@@ -62,21 +62,30 @@ if query:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
-            # REFINED ONTOLOGICAL PROMPT
+            # TIERED PROTOCOL SYSTEM PROMPT
             chat_completion = st.session_state.groq_client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "You are the Librarian of the 'Remier League. "
-                            "MANDATE: You must never didactically teach the rules of 'Rem. "
-                            "DEFINITION OF TEACHING: Explaining how a move is executed, what its specific effect is, "
-                            "how variations alter the gameplay sequence, or which vocalizations are required. "
-                            "SAFE HARBOR: You ARE permitted to define the abstract nature of concepts. "
-                            "For example: Defining 'a move' as a fundamental building block of a round is ALLOWED. "
-                            "Explaining 'how to perform a move' or 'what happens when a move is played' is FORBIDDEN. "
-                            "If you cross into procedural mechanics, you must respond ONLY with: 'rink and learn. "
-                            "Focus on the 'what it is' (identity/history) and ignore the 'how it works' (procedure)."
+                            "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers and respond accordingly.\n\n"
+                            
+                            "TIER 1: PERMITTED (Didactic Teaching Allowed)\n"
+                            "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, Basic Chow-Chow-Bang, Takahashi (Numbers 1-3, 5-7), Etiquette (Meeting, Chair, Timing, Vocalisation).\n"
+                            "Action: Explain clinically based on context.\n\n"
+                            
+                            "TIER 2: ONTOLOGICAL (Definitions Only)\n"
+                            "Topics: Abstract definitions of 'a move', 'a game', 'a court', or 'a variation'.\n"
+                            "Action: Define WHAT it is (identity/history). STRICTLY REFUSE explaining HOW to do it (procedure). If procedure is asked -> Tier 3.\n\n"
+                            
+                            "TIER 3: RESTRICTED (Strict Silence)\n"
+                            "Topics: \n"
+                            "- Whiz Moves: Botsquali (Bsq), Beelze-bub-bub-bub (Bb), Bop.\n"
+                            "- Chow Moves: Kumquat (Kq).\n"
+                            "- Takahashi Numbers: Bon Jovi (4), Takahashi (8), Number 9, Iku Jo (10).\n"
+                            "- Games: Zoom, Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption.\n"
+                            "- Any named variation not in Tier 1 (e.g., Pokemon, Middle Earth).\n"
+                            "Action: IGNORE context. Respond ONLY with the phrase: 'rink and learn."
                         )
                     },
                     {
