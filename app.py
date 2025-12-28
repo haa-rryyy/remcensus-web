@@ -26,42 +26,29 @@ if 'init_done' not in st.session_state:
 
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
-    """Applies specific 'Remier League linguistic and numeric constraints."""
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
     replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
     for word, replacement in replacements.items():
         text = text.replace(word, replacement)
     num_map = [
-        (r"\b444\b", "BJBJBJ"), (r"\bfour hundred and fourty four\b", "bon jovi hundred and bon jorty bon jovi"),
-        (r"\b888\b", "TKTKTK"), (r"\beight hundred and eighty eight\b", "takahashi hundred and takahashity takahashi"),
-        (r"\b400\b", "BJ00"), (r"\bfour hundred\b", "bon jovi hundred"),
-        (r"\b800\b", "TK00"), (r"\beight hundred\b", "takahashi hundred"),
-        (r"\b40\b", "BJ0"), (r"\bfourty\b", "bon jorty"),
-        (r"\b80\b", "TK0"), (r"\beighty\b", "takahashity"),
-        (r"\b14\b", "1BJ"), (r"\bfourteen\b", "bon jorteen"),
-        (r"\b18\b", "1TK"), (r"\beighteen\b", "takahashiteen"),
-        (r"\b4\b", "BJ"), (r"\bfour\b", "bon jovi"),
-        (r"\b8\b", "TK"), (r"\beight\b", "takahashi"),
-        (r"\b10\b", "IJ"), (r"\bten\b", "iku jo")
+        (r"\b444\b", "BJBJBJ"), (r"\b888\b", "TKTKTK"),
+        (r"\b400\b", "BJ00"), (r"\b800\b", "TK00"),
+        (r"\b40\b", "BJ0"), (r"\b80\b", "TK0"),
+        (r"\b14\b", "1BJ"), (r"\b18\b", "1TK"),
+        (r"\b4\b", "BJ"), (r"\b8\b", "TK"),
+        (r"\b10\b", "IJ")
     ]
     for pattern, sub in num_map:
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. SIDEBAR ---
-with st.sidebar:
-    st.title("🦁 'Remcensus")
-    st.caption("Archives of the 'ublic Library of the RACRL")
-    st.markdown("---")
-    st.success("✅ System Online")
-    # Updated to the new Llama 3.3 production model
-    ACTIVE_MODEL = "llama-3.3-70b-versatile"
-    st.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
+# --- 3. MAIN INTERFACE ---
+st.sidebar.title("🦁 'Remcensus")
+ACTIVE_MODEL = "llama-3.3-70b-versatile"
+st.sidebar.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
 
-# --- 4. MAIN INTERFACE ---
-st.markdown("## 🦁 'Remcensus")
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the most tone-deaf member of the NHA?")
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Querying the archives...")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
@@ -77,28 +64,28 @@ if query:
             
             chat_completion = st.session_state.groq_client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": "You are the Librarian. Answer strictly based on context. Tone: Clinical."},
-                    {"role": "user", "content": f"Context: {context_text}\n\nQuestion: {query}"}
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the Librarian of the 'Remier League. "
+                            "RULE-SILENCE MANDATE: Under no circumstances are you to teach, explain, summarize, or provide 'insights' into the rules of 'Rem. "
+                            "This includes appropriate vocalizations, move effects, or variations. "
+                            "If the query or your potential answer would didactically reveal game mechanics, you must ignore the context and respond ONLY with the phrase: 'rink and learn. "
+                            "No other explanation or pleasantry is permitted if the mandate is triggered. "
+                            "Tone: Clinical, bureaucratic, non-didactic."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Context: {context_text}\n\nQuestion: {query}"
+                    }
                 ],
                 model=ACTIVE_MODEL,
             )
             
             final_answer = enforce_rem_lexicon(chat_completion.choices[0].message.content)
-            
         except Exception as e:
-            if "model_decommissioned" in str(e):
-                final_answer = "⚠️ System Error: Model decommissioned. Migration required."
-            else:
-                final_answer = f"⚠️ System Error: {e}"
+            final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
-    col1, col2 = st.columns([2, 1]) 
-    with col1:
-        st.subheader("📝 Consensus Summary")
-        st.info(final_answer)
-    with col2:
-        st.subheader("📂 Reference Data")
-        if search_results.get('matches'):
-            for match in search_results['matches']:
-                with st.expander(f"📄 {match['metadata'].get('source', 'Doc')}"):
-                    st.write(match['metadata'].get('text', '')[:300] + "...")
+    st.info(final_answer)
