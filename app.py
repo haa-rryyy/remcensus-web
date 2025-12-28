@@ -49,12 +49,13 @@ def enforce_rem_lexicon(text):
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT ---
+# Standardized across all engines based on Beginner CurRemculum and Rem Rules
 SYSTEM_PROMPT = (
     "You are the Librarian of the 'Remier League. Classify the user query into one of three Tiers.\n\n"
     "TIER 1: PERMITTED\n"
     "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
     "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
-    "Etiquette (The Meeting, The Chair, Timing In/Out, Vocalisation, Hand Gestures, Courts, the Ball, Floating Games).\n"
+    "Etiquette (Meeting, Chair, Timing, Vocalisation).\n"
     "Action: Explain clinically based on context.\n\n"
     "TIER 2: ONTOLOGICAL\n"
     "Topics: Abstract definitions of 'a move', 'a game', or 'a court'.\n"
@@ -79,7 +80,7 @@ def generate_response(context, query):
     except Exception as e:
         debug_logs.append(f"Groq Error: {str(e)}")
         
-        # ATTEMPT 2: GEMINI
+        # ATTEMPT 2: GEMINI (Corrected model ID for google-genai SDK)
         try:
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -90,14 +91,14 @@ def generate_response(context, query):
         except Exception as e_gem:
             debug_logs.append(f"Gemini Error: {str(e_gem)}")
             
-            # ATTEMPT 3: HUGGING FACE
+            # ATTEMPT 3: HUGGING FACE (Using stable Mistral-7B)
             try:
                 response = st.session_state.hf_client.chat_completion(
-                    model="HuggingFaceH4/zephyr-7b-beta",
+                    model="mistralai/Mistral-7B-Instruct-v0.3",
                     messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=500
                 )
-                return response.choices[0].message.content, "Hugging Face (Zephyr)", debug_logs
+                return response.choices[0].message.content, "Hugging Face (Mistral)", debug_logs
             except Exception as e_hf:
                 debug_logs.append(f"HF Error: {str(e_hf)}")
                 return "⚠️ SYSTEM FAILURE: All protocols failed.", "OFFLINE", debug_logs
