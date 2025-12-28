@@ -53,10 +53,9 @@ with st.sidebar:
     st.caption("Archives of the 'ublic Library of the RACRL")
     st.markdown("---")
     st.success("✅ System Online")
-    st.info("'rink and Learn")
-    # Manual override for the model to bypass 404
-    MODEL_ID = "gemini-1.5-flash"
-    st.caption(f"Protocol: {MODEL_ID}")
+    # Switching to Pro to resolve Flash 404/429 issues
+    ACTIVE_MODEL = "gemini-1.5-pro"
+    st.caption(f"Protocol: {ACTIVE_MODEL}")
 
 # --- 4. MAIN INTERFACE ---
 st.markdown("## 🦁 'Remcensus")
@@ -65,25 +64,19 @@ query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the m
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
-            # Embedding check
             result = genai.embed_content(model="models/text-embedding-004", content=query)
-            
-            # Pinecone Retrieval
             search_results = st.session_state.pc_index.query(
                 vector=result['embedding'], top_k=5, include_metadata=True
             )
-            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
-            # Direct Model Call
-            model = genai.GenerativeModel(MODEL_ID)
+            model = genai.GenerativeModel(ACTIVE_MODEL)
             prompt = f"""
             SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
-            MANDATE: If user provides a direct task, execute precisely. 
-            If user asks a question, answer strictly based on provided context.
+            MANDATE: Answer strictly based on context. Execute direct tasks precisely.
             Tone: Clinical, precise, bureaucratic.
             
             Context: {context_text}
@@ -93,17 +86,7 @@ if query:
             final_answer = enforce_rem_lexicon(response.text)
             
         except Exception as e:
-            if "404" in str(e):
-                final_answer = "⚠️ System Error: Model version mismatch (404). Attempting reconnection..."
-                # Quick fallback attempt
-                try:
-                    model = genai.GenerativeModel("models/gemini-1.5-flash")
-                    response = model.generate_content(prompt)
-                    final_answer = enforce_rem_lexicon(response.text)
-                except:
-                    final_answer = f"⚠️ System Error: {e}"
-            else:
-                final_answer = f"⚠️ System Error: {e}"
+            final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
