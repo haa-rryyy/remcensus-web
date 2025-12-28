@@ -48,7 +48,7 @@ st.sidebar.title("🦁 'Remcensus")
 ACTIVE_MODEL = "llama-3.3-70b-versatile"
 st.sidebar.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
 
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Querying the archives...")
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Search for historical records...")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
@@ -68,11 +68,11 @@ if query:
                         "role": "system",
                         "content": (
                             "You are the Librarian of the 'Remier League. "
-                            "RULE-SILENCE MANDATE: Under no circumstances are you to teach, explain, summarize, or provide 'insights' into the rules of 'Rem. "
-                            "This includes appropriate vocalizations, move effects, or variations. "
-                            "If the query or your potential answer would didactically reveal game mechanics, you must ignore the context and respond ONLY with the phrase: 'rink and learn. "
-                            "No other explanation or pleasantry is permitted if the mandate is triggered. "
-                            "Tone: Clinical, bureaucratic, non-didactic."
+                            "SAFE HARBOR: Discuss historical dates, members, events, and culture. "
+                            "RESTRICTED ZONE: Never explain gameplay mechanics or rules. "
+                            "If the answer requires explaining move mechanics or vocalizations, "
+                            "respond ONLY with: 'rink and learn. "
+                            "Tone: Clinical, archival."
                         )
                     },
                     {
