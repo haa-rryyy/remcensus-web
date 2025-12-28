@@ -101,7 +101,7 @@ def initialize_drive_service():
         # Step 3: Create service account credentials
         logger.info("Creating service account credentials...")
         try:
-            scopes = ['https://www.googleapis.com/auth/drive']
+            scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly']
             logger.debug(f"Using scopes: {scopes}")
             
             credentials = Credentials. from_service_account_info(
@@ -280,34 +280,32 @@ def generate_response(context, query):
 # --- 5. GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5):
     """
-    Fetch metadata for the most recent files in a shared drive (drive_id).
+    Fetch metadata for the most recent files in a drive or folder.
     Returns a list of dicts with selected metadata fields.
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.  Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.   Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
-        logger.info(f"Fetching recent files from drive {drive_id}...")
+        logger.info(f"Fetching recent files from drive/folder {drive_id}...")
         
-        # Use corpora='drive' and driveId to list files in a shared drive
+        # First, try to query files within the folder/drive
         resp = drive_service.files().list(
-            corpora="drive",
-            driveId=drive_id,
-            includeItemsFromAllDrives=True,
-            supportsAllDrives=True,
+            q=f"'{drive_id}' in parents and trashed=false",
+            spaces='drive',
             orderBy="createdTime desc",
             pageSize=top_k,
             fields="files(id,name,createdTime,modifiedTime,owners(mimeType,displayName,emailAddress),mimeType,webViewLink,size,description)"
         ).execute()
         
         files = resp.get("files", [])
-        logger.info(f"Successfully fetched {len(files)} files from drive")
+        logger.info(f"Successfully fetched {len(files)} files from folder/drive")
         
         # Normalize datetime strings into ISO format for display
         for f in files:
-            if "createdTime" in f: 
+            if "createdTime" in f:  
                 try:
                     dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
                     f["createdTimeISO"] = dt.isoformat()
@@ -318,10 +316,10 @@ def fetch_drive_recent_files(drive_id, top_k=5):
         return files
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive files: {e.resp. status} - {e.content}")
+        logger. error(f"HTTP error fetching drive files: {e. resp.status} - {e.content}")
         raise
     except GoogleAPICallError as e:
-        logger.error(f"Google API error fetching drive files: {str(e)}")
+        logger. error(f"Google API error fetching drive files: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Unexpected error fetching drive files: {type(e).__name__} - {str(e)}", exc_info=True)
