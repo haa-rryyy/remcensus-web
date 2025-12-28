@@ -53,8 +53,8 @@ with st.sidebar:
     st.caption("Archives of the 'ublic Library of the RACRL")
     st.markdown("---")
     st.success("✅ System Online")
-    # Using the most current stable alias to bypass 404/429 loops
-    ACTIVE_MODEL = "gemini-flash-latest"
+    # Forced high-quota model for Dec 2025
+    ACTIVE_MODEL = "gemini-2.5-flash-lite"
     st.caption(f"Protocol: {ACTIVE_MODEL}")
 
 # --- 4. MAIN INTERFACE ---
@@ -77,9 +77,11 @@ if query:
             prompt = f"SYSTEM: Librarian Persona. Context: {context_text} Question: {query}"
             response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
-            
         except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
+            if "429" in str(e):
+                final_answer = "⚠️ System Error: Daily/Minute Quota reached. Please wait 60 seconds."
+            else:
+                final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
