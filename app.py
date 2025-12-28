@@ -28,7 +28,6 @@ if 'init_done' not in st.session_state:
 
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
-    """Applies specific 'Remier League linguistic and numeric constraints."""
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
     replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
@@ -53,24 +52,24 @@ SYSTEM_PROMPT = (
     "TIER 1: PERMITTED (Didactic Teaching Allowed)\n"
     "Topics: Basic Whiz (Whiz, Bang, Bounce, Alley-oop), Basic Antlers, "
     "Basic Chow-Chow-Bang (Chow, Bang), Takahashi (Numbers 1-3, 5-7), "
-    "Etiquette (The Meeting, The Chair, Timing In/Out, Vocalisation, Hand Gestures, Courts, the Ball, Floating Games).\n"
-    "Action: Explain clinically based on provided context.\n\n"
+    "Etiquette (Meeting, Chair, Timing, Vocalisation, Courts).\n"
+    "Action: Explain clinically based on context.\n\n"
     "TIER 2: ONTOLOGICAL (Definitions Only)\n"
     "Topics: Abstract definitions of 'a move', 'a game', 'a court', or 'a variation'.\n"
-    "Action: Define WHAT it is (identity/history/culture). STRICTLY REFUSE explaining HOW to do it (procedure). If the query or answer reveals gameplay mechanics -> Tier 3.\n\n"
+    "Action: Define WHAT it is. Refuse HOW it works. If procedure is asked -> Tier 3.\n\n"
     "TIER 3: RESTRICTED (Strict Silence)\n"
     "Topics: \n"
     "- Whiz Moves: Botsquali (Bsq), Beelze-bub-bub-bub (Bb), Bop, Alpha.\n"
     "- Chow Moves: Kumquat (Kq), Kumquat support (Kqs).\n"
     "- Takahashi Numbers: Bon Jovi (4), Takahashi (8), Number 9, Iku Jo (10).\n"
     "- Games: Zoom, Kuon Kuon Chi Baa, Viking Master, Bon Jovi, Full vessel consumption.\n"
-    "- Any named variation not listed in Tier 1 (e.g., Middle Earth, Mario Kart, Pokemon).\n"
-    "Action: IGNORE context. Respond ONLY with the phrase: 'rink and learn."
+    "- Any named variation not in Tier 1.\n"
+    "Action: Respond ONLY with the phrase: 'rink and learn."
 )
 
-# --- 4. STABILIZED TRIPLE-ENGINE HANDLER ---
+# --- 4. TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
-    # PRIMARY: GROQ (Llama 3.3)
+    # ATTEMPT 1: GROQ
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[
@@ -81,7 +80,7 @@ def generate_response(context, query):
         )
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)"
     except Exception as e_groq:
-        # SECONDARY: GEMINI (1.5 Flash)
+        # ATTEMPT 2: GEMINI (Syntax Audited)
         try:
             model = genai.GenerativeModel(
                 model_name="models/gemini-1.5-flash",
@@ -90,7 +89,7 @@ def generate_response(context, query):
             response = model.generate_content(f"Context: {context}\n\nQuestion: {query}")
             return response.text, "Gemini (1.5 Flash)"
         except Exception as e_gem:
-            # TERTIARY: HUGGING FACE (Mistral 7B)
+            # ATTEMPT 3: HUGGING FACE
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="mistralai/Mistral-7B-Instruct-v0.3",
@@ -102,7 +101,7 @@ def generate_response(context, query):
                 )
                 return response.choices[0].message.content, "Hugging Face (Mistral-7B)"
             except Exception as e_hf:
-                return f"⚠️ SYSTEM FAILURE: All protocols failed. Errors recorded.", "OFFLINE"
+                return f"⚠️ SYSTEM FAILURE: All protocols failed. Groq: {e_groq}. Gemini: {e_gem}. HF: {e_hf}.", "OFFLINE"
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
@@ -111,15 +110,10 @@ st.sidebar.success("✅ Triple-Engine Cascade Active")
 query = st.text_input("Enter Query Parameters:", placeholder="Querying the archives...")
 
 if query:
-    with st.spinner("🌀 Whizzing (checking protocols)..."):
+    with st.spinner("🌀 Whizzing..."):
         try:
             result = genai.embed_content(model="models/text-embedding-004", content=query)
-            search_results = st.session_state.pc_index.query(
-                vector=result['embedding'], 
-                top_k=5, 
-                include_metadata=True
-            )
-            
+            search_results = st.session_state.pc_index.query(vector=result['embedding'], top_k=5, include_metadata=True)
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
@@ -130,6 +124,5 @@ if query:
             
             st.caption(f"Generated via: {engine_used}")
             st.info(final_answer)
-            
         except Exception as e:
             st.error(f"⚠️ Critical Error: {e}")
