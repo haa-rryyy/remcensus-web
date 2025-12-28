@@ -17,13 +17,8 @@ if 'init_done' not in st.session_state:
     try:
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        
-        # Keep Gemini for Embeddings
         genai.configure(api_key=st.secrets["GEMINI_KEY"])
-        
-        # Initialize Groq for Generation
         st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        
         st.session_state.init_done = True
     except Exception as e:
         st.error(f"🔐 Security Error: {e}")
@@ -60,8 +55,8 @@ with st.sidebar:
     st.caption("Archives of the 'ublic Library of the RACRL")
     st.markdown("---")
     st.success("✅ System Online")
-    # llama-3.1-70b-versatile is the current high-quota stable model on Groq
-    ACTIVE_MODEL = "llama-3.1-70b-versatile"
+    # Updated to the new Llama 3.3 production model
+    ACTIVE_MODEL = "llama-3.3-70b-versatile"
     st.caption(f"Protocol: Groq/{ACTIVE_MODEL}")
 
 # --- 4. MAIN INTERFACE ---
@@ -71,10 +66,7 @@ query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the m
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
-            # 1. Embed via Gemini (Stable 404-free endpoint)
             result = genai.embed_content(model="models/text-embedding-004", content=query)
-            
-            # 2. Pinecone Retrieval
             search_results = st.session_state.pc_index.query(
                 vector=result['embedding'], top_k=5, include_metadata=True
             )
@@ -83,26 +75,21 @@ if query:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
-            # 3. Generate via Groq
             chat_completion = st.session_state.groq_client.chat.completions.create(
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "You are the Librarian of the 'Remier League. Answer strictly based on context. Ton: Clinical, bureaucratic."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Context: {context_text}\n\nQuestion: {query}"
-                    }
+                    {"role": "system", "content": "You are the Librarian. Answer strictly based on context. Tone: Clinical."},
+                    {"role": "user", "content": f"Context: {context_text}\n\nQuestion: {query}"}
                 ],
                 model=ACTIVE_MODEL,
             )
             
-            raw_response = chat_completion.choices[0].message.content
-            final_answer = enforce_rem_lexicon(raw_response)
+            final_answer = enforce_rem_lexicon(chat_completion.choices[0].message.content)
             
         except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
+            if "model_decommissioned" in str(e):
+                final_answer = "⚠️ System Error: Model decommissioned. Migration required."
+            else:
+                final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
