@@ -50,19 +50,11 @@ def enforce_rem_lexicon(text):
 # --- 3. DYNAMIC MODEL HANDSHAKE ---
 def get_working_model():
     """Tries specific modern model IDs to bypass 404 versioning errors."""
-    # Priority list for 2025 stability
-    stable_ids = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-002",
-        "gemini-2.0-flash",
-        "gemini-pro"
-    ]
-    
+    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-2.0-flash", "gemini-pro"]
     try:
         available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for sid in stable_ids:
-            if sid in available:
-                return sid
+            if sid in available: return sid
         return available[0] if available else "gemini-1.5-flash"
     except:
         return "gemini-1.5-flash"
@@ -74,11 +66,39 @@ with st.sidebar:
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    
     if 'model_id' not in st.session_state:
         st.session_state.model_id = get_working_model()
     st.caption(f"Protocol: {st.session_state.model_id}")
 
 # --- 5. MAIN INTERFACE ---
 st.markdown("## 🦁 'Remcensus")
-query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the
+query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the most tone-deaf member of the NHA?")
+
+if query:
+    with st.spinner("🌀 Whizzing..."):
+        try:
+            result = genai.embed_content(model="models/text-embedding-004", content=query)
+            search_results = st.session_state.pc_index.query(
+                vector=result['embedding'], top_k=5, include_metadata=True
+            )
+            context_text = ""
+            for match in search_results['matches']:
+                meta = match['metadata']
+                context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
+            model = genai.GenerativeModel(st.session_state.model_id)
+            response = model.generate_content(f"SYSTEM: Librarian Persona. Context: {context_text} Question: {query}")
+            final_answer = enforce_rem_lexicon(response.text)
+        except Exception as e:
+            final_answer = f"⚠️ System Error: {e}"
+            search_results = {'matches': []}
+
+    col1, col2 = st.columns([2, 1]) 
+    with col1:
+        st.subheader("📝 Consensus Summary")
+        st.info(final_answer)
+    with col2:
+        st.subheader("📂 Reference Data")
+        if search_results.get('matches'):
+            for match in search_results['matches']:
+                with st.expander(f"📄 {match['metadata'].get('source', 'Doc')}"):
+                    st.write(match['metadata'].get('text', '')[:300] + "...")
