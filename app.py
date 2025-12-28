@@ -25,7 +25,6 @@ if 'init_done' not in st.session_state:
 # --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
     """Applies specific 'Remier League linguistic and numeric constraints."""
-    
     # Words starting with P (Replace P/p with apostrophe only)
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
@@ -58,7 +57,9 @@ def enforce_rem_lexicon(text):
 
 # --- 3. DYNAMIC MODEL HANDSHAKE ---
 def get_working_model():
-    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-pro"]
+    """Prioritizes 1.5-flash series for stability and higher free-tier quotas."""
+    # 2.5-flash is removed to avoid the 429 quota traps encountered.
+    stable_ids = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-pro"]
     try:
         available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for sid in stable_ids:
@@ -96,7 +97,6 @@ if query:
             
             model = genai.GenerativeModel(st.session_state.model_id)
             
-            # Adjusted Prompt to allow direct tasks while prioritizing context
             prompt = f"""
             SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
             MANDATE: If the user provides a direct task (like writing a list), execute it precisely. 
@@ -111,7 +111,10 @@ if query:
             response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
         except Exception as e:
-            final_answer = f"⚠️ System Error: {e}"
+            if "429" in str(e):
+                final_answer = "⚠️ System Error: Daily/Minute Quota exceeded. Please wait 60 seconds or try again later."
+            else:
+                final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
 
     col1, col2 = st.columns([2, 1]) 
