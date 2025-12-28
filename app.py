@@ -15,7 +15,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 from google. api_core. exceptions import GoogleAPICallError
 from googleapiclient.discovery import build
-from googleapiclient. errors import HttpError
+from googleapiclient.errors import HttpError
 
 # Configure logging with detailed formatting
 logging.basicConfig(
@@ -29,7 +29,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# --- 1.  CONFIGURATION & SETUP ---
+# --- 1. CONFIGURATION & SETUP ---
 st.set_page_config(
     page_title="'Remcensus",
     page_icon="🦁",
@@ -94,17 +94,17 @@ def initialize_drive_service():
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse credentials JSON: {str(e)}")
             return None
-        except Exception as e:
+        except Exception as e: 
             logger.error(f"Unexpected error parsing credentials: {type(e).__name__} - {str(e)}")
             return None
         
         # Step 3: Create service account credentials
         logger.info("Creating service account credentials...")
         try:
-            scopes = ['https://www.googleapis.com/auth/drive. metadata.readonly']
+            scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly']
             logger.debug(f"Using scopes: {scopes}")
             
-            credentials = Credentials.from_service_account_info(
+            credentials = Credentials. from_service_account_info(
                 cred_content,
                 scopes=scopes
             )
@@ -123,12 +123,12 @@ def initialize_drive_service():
         logger.info("Checking if credentials need refresh...")
         try:
             if not credentials.valid:
-                logger.debug("Credentials not valid, attempting refresh...")
+                logger. debug("Credentials not valid, attempting refresh...")
                 credentials.refresh(Request())
                 logger.info("Credentials refreshed successfully")
             else:
                 logger.debug("Credentials are valid, no refresh needed")
-        except Exception as e: 
+        except Exception as e:
             logger.error(f"Failed to refresh credentials: {type(e).__name__} - {str(e)}")
             logger.debug("Continuing with unrefreshed credentials...")
         
@@ -140,17 +140,17 @@ def initialize_drive_service():
             logger.debug(f"Service type: {type(service)}")
             
         except HttpError as e:
-            logger.error(f"HTTP error building Drive service: {e.resp. status} - {e.content}")
+            logger. error(f"HTTP error building Drive service: {e. resp.status} - {e. content}")
             return None
         except GoogleAPICallError as e:
             logger.error(f"Google API error building Drive service: {str(e)}")
             return None
-        except Exception as e:
+        except Exception as e: 
             logger.error(f"Unexpected error building Drive service: {type(e).__name__} - {str(e)}")
             return None
         
         # Step 6: Test the service
-        logger. info("Testing Google Drive service with a basic API call...")
+        logger.info("Testing Google Drive service with a basic API call...")
         try:
             results = service.files().list(
                 spaces='drive',
@@ -174,8 +174,8 @@ def initialize_drive_service():
         
         return service
         
-    except Exception as e: 
-        logger.critical(f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}", exc_info=True)
+    except Exception as e:
+        logger. critical(f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}", exc_info=True)
         return None
 
 
@@ -193,8 +193,8 @@ if 'init_done' not in st.session_state:
         logger.info("Initializing Pinecone and AI clients...")
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
-        st.session_state.groq_client = Groq(api_key=st. secrets["GROQ_API_KEY"])
+        st.session_state.google_client = google_genai. Client(api_key=st.secrets["GEMINI_KEY"])
+        st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
         logger.info("Pinecone and AI clients initialized successfully")
         
@@ -202,7 +202,7 @@ if 'init_done' not in st.session_state:
         logger.info("Initializing Google Drive service...")
         st.session_state.drive_service = initialize_drive_service()
         
-        if st. session_state.drive_service:
+        if st.session_state.drive_service:
             logger.info("Drive service initialized successfully")
         else:
             logger.warning("Drive service initialization returned None - Drive features will be unavailable")
@@ -240,13 +240,44 @@ SYSTEM_PROMPT = (
     "You are the Librarian of the 'Remier League.  Conduct a silent background triage of the request.\n\n"
     "1. Do not mention Tiers or classification labels in your response.\n"
     "2. For simple identity queries, provide only an ontological definition.  Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.  DIDACTIC TEACHING:  Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "3. DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
     "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:  'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10[cite[... ]\n"
     "5. Tone: Archival, bureaucratic."
 )
 
-# --- 4. GOOGLE DRIVE METADATA HELPER ---
+# --- 4. TRIPLE-ENGINE HANDLER ---
+def generate_response(context, query):
+    debug_logs = []
+    try:
+        chat_completion = st.session_state.groq_client.chat.completions.create(
+            messages=[{"role": "system", "content":  SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+            model="llama-3.3-70b-versatile",
+        )
+        return chat_completion.choices[0]. message.content, "Groq (Llama 3.3)", debug_logs
+    except Exception as e:
+        debug_logs.append(f"Groq:  {str(e)}")
+        try:
+            response = st.session_state.google_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=f"Context: {context}\n\nQuestion: {query}",
+                config={'system_instruction': SYSTEM_PROMPT}
+            )
+            return response.text, "Gemini (1.5 Flash)", debug_logs
+        except Exception as e_gem:
+            debug_logs.append(f"Gemini: {str(e_gem)}")
+            try:
+                response = st.session_state.hf_client. chat_completion(
+                    model="meta-llama/Llama-3.2-3B-Instruct",
+                    messages=[{"role":  "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+                    max_tokens=800
+                )
+                return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
+            except Exception as e_hf:
+                debug_logs.append(f"HF: {str(e_hf)}")
+                return "⚠️ SYSTEM FAILURE:  All protocols failed.", "OFFLINE", debug_logs
+
+# --- 5. GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5):
     """
     Fetch metadata for the most recent files in a shared drive (drive_id).
@@ -276,18 +307,18 @@ def fetch_drive_recent_files(drive_id, top_k=5):
         
         # Normalize datetime strings into ISO format for display
         for f in files:
-            if "createdTime" in f:
+            if "createdTime" in f: 
                 try:
                     dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
                     f["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger. warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
+                    logger.warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
                     f["createdTimeISO"] = f. get("createdTime")
         
         return files
         
     except HttpError as e:
-        logger.error(f"HTTP error fetching drive files: {e.resp.status} - {e.content}")
+        logger. error(f"HTTP error fetching drive files: {e.resp. status} - {e.content}")
         raise
     except GoogleAPICallError as e:
         logger.error(f"Google API error fetching drive files: {str(e)}")
@@ -295,37 +326,6 @@ def fetch_drive_recent_files(drive_id, top_k=5):
     except Exception as e:
         logger.error(f"Unexpected error fetching drive files: {type(e).__name__} - {str(e)}", exc_info=True)
         raise
-
-# --- 5. TRIPLE-ENGINE HANDLER ---
-def generate_response(context, query):
-    debug_logs = []
-    try:
-        chat_completion = st.session_state.groq_client.chat.completions.create(
-            messages=[{"role": "system", "content":  SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
-            model="llama-3.3-70b-versatile",
-        )
-        return chat_completion.choices[0]. message.content, "Groq (Llama 3.3)", debug_logs
-    except Exception as e:
-        debug_logs.append(f"Groq:  {str(e)}")
-        try:
-            response = st.session_state.google_client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=f"Context: {context}\n\nQuestion: {query}",
-                config={'system_instruction':  SYSTEM_PROMPT}
-            )
-            return response.text, "Gemini (1.5 Flash)", debug_logs
-        except Exception as e_gem:
-            debug_logs.append(f"Gemini: {str(e_gem)}")
-            try:
-                response = st.session_state.hf_client.chat_completion(
-                    model="meta-llama/Llama-3.2-3B-Instruct",
-                    messages=[{"role":  "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
-                    max_tokens=800
-                )
-                return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
-            except Exception as e_hf:
-                debug_logs.append(f"HF: {str(e_hf)}")
-                return "⚠️ SYSTEM FAILURE: All protocols failed.", "OFFLINE", debug_logs
 
 # --- 6. MAIN INTERFACE ---
 query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
@@ -344,7 +344,7 @@ if query:
 
             # Run embedding + pinecone retrieval as before
             result = st.session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
-            search_results = st.session_state.pc_index.query(vector=result.embeddings[0]. values, top_k=5, include_metadata=True)
+            search_results = st.session_state.pc_index.query(vector=result. embeddings[0]. values, top_k=5, include_metadata=True)
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
@@ -354,44 +354,49 @@ if query:
             if use_gdrive: 
                 try:
                     logger.info("Fetching Google Drive metadata...")
-                    drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k)
-                    
-                    if drive_files:
-                        logger.info(f"Retrieved {len(drive_files)} files from Drive")
-                        
-                        # If the user directly asked for the most recent file, show it immediately
-                        if wants_most_recent:
-                            most_recent = drive_files[0]
-                            created = most_recent. get("createdTimeISO", most_recent.get("createdTime", "unknown"))
-                            name = most_recent.get("name", "Unnamed")
-                            link = most_recent.get("webViewLink", "No link available (insufficient perms)")
-                            mime = most_recent.get("mimeType", "unknown")
-                            
-                            logger.info(f"Displaying most recent file: {name}")
-                            st.success("Most recent file in the Drive (by created time):")
-                            st.write(f"- Name: **{name}**")
-                            st.write(f"- Created: {created}")
-                            st.write(f"- Type: {mime}")
-                            st.write(f"- Link: {link}")
-                        
-                        # Append drive metadata into context so LLMs can reference it
-                        context_text += "\n---\nGoogleDrive Metadata (most recent items):\n"
-                        for f in drive_files:
-                            owners = ", ".join([o. get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
-                            context_text += f"Name: {f. get('name')}\nCreated: {f. get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
-                            logger.debug(f"Added to context: {f.get('name')}")
+                    # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
+                    if st.session_state.drive_service is None:
+                        logger.warning("Drive service is None - skipping Drive metadata")
+                        st.warning("⚠️ Drive service not initialized. Drive metadata unavailable.")
                     else:
-                        st.info("No files returned from the specified Drive (or insufficient permissions).")
-                        logger.warning(f"No files returned from drive {drive_id_input}")
+                        drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k)
+                        
+                        if drive_files:
+                            logger.info(f"Retrieved {len(drive_files)} files from Drive")
+                            
+                            # If the user directly asked for the most recent file, show it immediately
+                            if wants_most_recent:
+                                most_recent = drive_files[0]
+                                created = most_recent.get("createdTimeISO", most_recent.get("createdTime", "unknown"))
+                                name = most_recent.get("name", "Unnamed")
+                                link = most_recent.get("webViewLink", "No link available (insufficient perms)")
+                                mime = most_recent.get("mimeType", "unknown")
+                                
+                                logger.info(f"Displaying most recent file: {name}")
+                                st.success("Most recent file in the Drive (by created time):")
+                                st. write(f"- Name: **{name}**")
+                                st.write(f"- Created: {created}")
+                                st.write(f"- Type: {mime}")
+                                st.write(f"- Link: {link}")
+                            
+                            # Append drive metadata into context so LLMs can reference it
+                            context_text += "\n---\nGoogleDrive Metadata (most recent items):\n"
+                            for f in drive_files:
+                                owners = ", ".join([o. get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
+                                context_text += f"Name: {f. get('name')}\nCreated: {f. get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
+                                logger.debug(f"Added to context: {f.get('name')}")
+                        else: 
+                            st.info("No files returned from the specified Drive (or insufficient permissions).")
+                            logger.warning(f"No files returned from drive {drive_id_input}")
                         
                 except Exception as e_drive:
                     logger.error(f"Google Drive metadata fetch failed: {type(e_drive).__name__} - {str(e_drive)}", exc_info=True)
-                    st.warning(f"Google Drive metadata fetch failed: {e_drive}")
+                    st.error(f"❌ Google Drive metadata fetch failed: {str(e_drive)}")
 
             logger.info("Generating response from LLM...")
             raw_text, engine_used, logs = generate_response(context_text, query)
             final_answer = enforce_rem_lexicon(raw_text)
-            st.caption(f"Generated via:  {engine_used}")
+            st.caption(f"Generated via: {engine_used}")
             st.info(final_answer)
             
             if engine_used == "OFFLINE":
