@@ -47,53 +47,43 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. STRICT GEMINI SELECTOR ---
-def get_working_model():
-    """Bypasses Gemma and experimental models to force Gemini 1.5 high-quota channel."""
-    preferred = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001"]
-    try:
-        raw_available = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Filter: Strictly Gemini 1.5 series to ensure 1,500 RPD
-        available = [m for m in raw_available if m.startswith("gemini-1.5")]
-        
-        for p in preferred:
-            if p in available: return p
-        return available[0] if available else "gemini-1.5-flash"
-    except:
-        return "gemini-1.5-flash"
-
-# --- 4. SIDEBAR ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.title("🦁 'Remcensus")
     st.caption("Archives of the 'ublic Library of the RACRL")
     st.markdown("---")
     st.success("✅ System Online")
     st.info("'rink and Learn")
-    st.session_state.model_id = get_working_model()
-    st.caption(f"Protocol: {st.session_state.model_id}")
+    # Manual override for the model to bypass 404
+    MODEL_ID = "gemini-1.5-flash"
+    st.caption(f"Protocol: {MODEL_ID}")
 
-# --- 5. MAIN INTERFACE ---
+# --- 4. MAIN INTERFACE ---
 st.markdown("## 🦁 'Remcensus")
 query = st.text_input("Enter Query Parameters:", placeholder="e.g., Who is the most tone-deaf member of the NHA?")
 
 if query:
     with st.spinner("🌀 Whizzing..."):
         try:
+            # Embedding check
             result = genai.embed_content(model="models/text-embedding-004", content=query)
+            
+            # Pinecone Retrieval
             search_results = st.session_state.pc_index.query(
                 vector=result['embedding'], top_k=5, include_metadata=True
             )
+            
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
             
-            model = genai.GenerativeModel(st.session_state.model_id)
+            # Direct Model Call
+            model = genai.GenerativeModel(MODEL_ID)
             prompt = f"""
             SYSTEM INSTRUCTION: You are the Librarian of the 'Remier League. 
-            MANDATE: If the user provides a direct task (like writing a list), execute it precisely. 
-            If the user asks a question, answer strictly based on the provided context.
+            MANDATE: If user provides a direct task, execute precisely. 
+            If user asks a question, answer strictly based on provided context.
             Tone: Clinical, precise, bureaucratic.
             
             Context: {context_text}
@@ -101,9 +91,17 @@ if query:
             """
             response = model.generate_content(prompt)
             final_answer = enforce_rem_lexicon(response.text)
+            
         except Exception as e:
-            if "429" in str(e):
-                final_answer = "⚠️ System Error: Daily/Minute Quota exceeded. Please wait 60 seconds."
+            if "404" in str(e):
+                final_answer = "⚠️ System Error: Model version mismatch (404). Attempting reconnection..."
+                # Quick fallback attempt
+                try:
+                    model = genai.GenerativeModel("models/gemini-1.5-flash")
+                    response = model.generate_content(prompt)
+                    final_answer = enforce_rem_lexicon(response.text)
+                except:
+                    final_answer = f"⚠️ System Error: {e}"
             else:
                 final_answer = f"⚠️ System Error: {e}"
             search_results = {'matches': []}
