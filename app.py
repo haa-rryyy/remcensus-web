@@ -46,23 +46,20 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. UNIVERSAL SYSTEM PROMPT (SILENT TRIAGE) ---
+# --- 3. UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
 SYSTEM_PROMPT = (
     "You are the Librarian of the 'Remier League. Conduct a silent background triage of the request.\n\n"
     "1. Do not mention Tiers or classification labels in your response.\n"
-    "2. For simple identity queries (e.g., 'What is Whiz?'), provide only an ontological/historical "
-    "definition. Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3. DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), "
-    "and Etiquette, and only if explicitly requested.\n"
-    "4. RESTRICTED ZONE: For any mention of Botsquali, Beelze-bub-bub-bub, Bop, Kumquat, Zoom, "
-    "Kuon Kuon Chi Baa, Viking Master, Bon Jovi, or numbers 4, 8, 9, 10, respond ONLY with: 'rink and learn.\n"
+    "2. For simple identity queries, provide only an ontological definition. Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3. DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase: 'rink and learn.\n"
+    "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10[cite: 61, 263, 265, 268, 277, 281, 288, 305].\n"
     "5. Tone: Archival, bureaucratic."
 )
 
 # --- 4. TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
     debug_logs = []
-    # ATTEMPT 1: GROQ
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
@@ -71,7 +68,6 @@ def generate_response(context, query):
         return chat_completion.choices[0].message.content, "Groq (Llama 3.3)", debug_logs
     except Exception as e:
         debug_logs.append(f"Groq: {str(e)}")
-        # ATTEMPT 2: GEMINI
         try:
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -81,7 +77,6 @@ def generate_response(context, query):
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
             debug_logs.append(f"Gemini: {str(e_gem)}")
-            # ATTEMPT 3: HF
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
@@ -95,22 +90,15 @@ def generate_response(context, query):
 
 # --- 5. MAIN INTERFACE ---
 st.sidebar.title("🦁 'Remcensus")
-st.sidebar.success("✅ Silent Triage Active")
+st.sidebar.success("✅ Protocol Discovery Active")
 
-query = st.text_input("Enter Query Parameters:", placeholder="Search the 'ublic Library...")
+query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
 
 if query:
-    with st.spinner("🌀 Processing..."):
+    with st.spinner("🌀 Triage in progress..."):
         try:
-            result = st.session_state.google_client.models.embed_content(
-                model="text-embedding-004",
-                contents=query
-            )
-            search_results = st.session_state.pc_index.query(
-                vector=result.embeddings[0].values, 
-                top_k=5, 
-                include_metadata=True
-            )
+            result = st.session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
+            search_results = st.session_state.pc_index.query(vector=result.embeddings[0].values, top_k=5, include_metadata=True)
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
