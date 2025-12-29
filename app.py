@@ -11,9 +11,9 @@ import sys
 import os
 
 # Google Drive API imports
-from google.auth.transport.requests import Request
+from google.auth.transport. requests import Request
 from google.oauth2.service_account import Credentials
-from google. api_core. exceptions import GoogleAPICallError
+from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -40,7 +40,7 @@ st.set_page_config(
 # --- GOOGLE DRIVE SERVICE INITIALIZATION ---
 def initialize_drive_service():
     """
-    Initialize Google Drive service with detailed error logging and debugging. 
+    Initialize Google Drive service with detailed error logging and debugging.  
     
     Returns:
         googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails.
@@ -94,7 +94,7 @@ def initialize_drive_service():
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse credentials JSON: {str(e)}")
             return None
-        except Exception as e: 
+        except Exception as e:  
             logger.error(f"Unexpected error parsing credentials: {type(e).__name__} - {str(e)}")
             return None
         
@@ -140,13 +140,13 @@ def initialize_drive_service():
             logger.debug(f"Service type: {type(service)}")
             
         except HttpError as e:
-            logger. error(f"HTTP error building Drive service: {e. resp.status} - {e. content}")
+            logger. error(f"HTTP error building Drive service: {e. resp. status} - {e.content}")
             return None
         except GoogleAPICallError as e:
             logger.error(f"Google API error building Drive service: {str(e)}")
             return None
-        except Exception as e: 
-            logger.error(f"Unexpected error building Drive service: {type(e).__name__} - {str(e)}")
+        except Exception as e:  
+            logger.error(f"Unexpected error building Drive service:  {type(e).__name__} - {str(e)}")
             return None
         
         # Step 6: Test the service
@@ -183,9 +183,9 @@ def initialize_drive_service():
 st.sidebar.title("🦁 'Remcensus")
 st.sidebar.success("✅ Protocol Discovery Active")
 st.sidebar.markdown("---")
-use_gdrive = st.sidebar.checkbox("Include Google Drive metadata in search", value=False)
+use_gdrive = st.sidebar. checkbox("Include Google Drive metadata in search", value=False)
 drive_id_input = st.sidebar.text_input("Google Drive ID to use:", value="10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9")
-gdrive_top_k = st.sidebar.number_input("Number of drive items to include (metadata only)", min_value=1, max_value=20, value=5, step=1)
+gdrive_top_k = st. sidebar.number_input("Number of drive items to include (metadata only)", min_value=1, max_value=20, value=5, step=1)
 
 # SECURE CONNECTION
 if 'init_done' not in st.session_state:
@@ -232,7 +232,7 @@ def enforce_rem_lexicon(text):
         (r"\b10\b", "IJ"), (r"\bten\b", "iku jo")
     ]
     for pattern, sub in num_map:
-        text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
+        text = re.sub(pattern, sub, text, flags=re. IGNORECASE)
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
@@ -243,11 +243,11 @@ SYSTEM_PROMPT = (
     "Do not use stage directions like *pauses*, *scribbles*, etc.\n"
     "Keep responses concise and informational.\n\n"
     "1. Do not mention Tiers or classification labels in your response.\n"
-    "2. For simple identity queries, provide only an ontological definition.  Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3. DIDACTIC TEACHING:  Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:  'rink and learn.\n"
+    "2. For simple identity queries, provide only an ontological definition.   Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3.  DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:   'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
-    "5. Format:  Direct answers only. No narrative, actions, or roleplay."
+    "5. Format:   Direct answers only. No narrative, actions, or roleplay."
 )
 
 # --- 4. TRIPLE-ENGINE HANDLER ---
@@ -265,50 +265,83 @@ def generate_response(context, query):
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=f"Context: {context}\n\nQuestion: {query}",
-                config={'system_instruction': SYSTEM_PROMPT}
+                config={'system_instruction':  SYSTEM_PROMPT}
             )
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
             debug_logs.append(f"Gemini: {str(e_gem)}")
             try:
-                response = st.session_state.hf_client. chat_completion(
+                response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
                     messages=[{"role":  "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=800
                 )
-                return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
+                return response. choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
             except Exception as e_hf:
                 debug_logs.append(f"HF: {str(e_hf)}")
-                return "⚠️ SYSTEM FAILURE:  All protocols failed.", "OFFLINE", debug_logs
+                return "⚠️ SYSTEM FAILURE: All protocols failed.", "OFFLINE", debug_logs
 
 # --- 5. GOOGLE DRIVE METADATA HELPER ---
-def fetch_drive_recent_files(drive_id, top_k=5):
+def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
     Fetch metadata for the most recent files in a drive or folder.
+    Optionally filters by search query relevance.
     Returns a list of dicts with selected metadata fields.
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.    Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.  Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
         logger.info(f"Fetching recent files from drive/folder {drive_id}...")
         
+        # Build query to exclude folders if search_query is provided
+        query = f"'{drive_id}' in parents and trashed=false"
+        if search_query:
+            # Exclude folders when doing a specific search
+            query += " and mimeType != 'application/vnd.google-apps.folder'"
+            logger.debug(f"Filtering out folders for search query: {search_query}")
+        
         # Query files within the folder/drive
         resp = drive_service.files().list(
-            q=f"'{drive_id}' in parents and trashed=false",
+            q=query,
             spaces='drive',
-            orderBy="createdTime desc",
-            pageSize=top_k,
+            orderBy="modifiedTime desc",
+            pageSize=top_k * 3,  # Fetch more to filter by relevance
             fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)"
         ).execute()
         
         files = resp.get("files", [])
         logger.info(f"Successfully fetched {len(files)} files from folder/drive")
         
+        # If search_query provided, score files by relevance
+        if search_query:
+            search_terms = search_query.lower().split()
+            scored_files = []
+            
+            for f in files:
+                # Score based on filename and description matches
+                name_lower = f. get('name', '').lower()
+                desc_lower = f.get('description', '').lower()
+                score = 0
+                
+                for term in search_terms:
+                    if term in name_lower:  
+                        score += 3  # Higher weight for name matches
+                    if term in desc_lower:
+                        score += 1
+                
+                if score > 0:
+                    scored_files. append((score, f))
+            
+            # Sort by score (descending) then by modified time
+            scored_files.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
+            files = [f for _, f in scored_files[:top_k]]
+            logger.info(f"Filtered to {len(files)} relevant files based on search query")
+        
         # Normalize datetime strings into ISO format for display
-        for f in files:
+        for f in files: 
             if "createdTime" in f:  
                 try:
                     dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
@@ -316,14 +349,22 @@ def fetch_drive_recent_files(drive_id, top_k=5):
                 except Exception as dt_e:
                     logger. warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
                     f["createdTimeISO"] = f. get("createdTime")
+            
+            if "modifiedTime" in f:
+                try:
+                    dt = datetime.fromisoformat(f["modifiedTime"]. replace("Z", "+00:00"))
+                    f["modifiedTimeISO"] = dt.isoformat()
+                except Exception as dt_e:
+                    logger.warning(f"Failed to parse datetime {f['modifiedTime']}: {dt_e}")
+                    f["modifiedTimeISO"] = f.get("modifiedTime")
         
         return files
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive files: {e. resp.status} - {e. content}")
+        logger. error(f"HTTP error fetching drive files: {e.resp.status} - {e.content}")
         raise
     except GoogleAPICallError as e:
-        logger. error(f"Google API error fetching drive files: {str(e)}")
+        logger.error(f"Google API error fetching drive files: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Unexpected error fetching drive files: {type(e).__name__} - {str(e)}", exc_info=True)
@@ -332,7 +373,7 @@ def fetch_drive_recent_files(drive_id, top_k=5):
 # --- 6. MAIN INTERFACE ---
 query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
 
-if query:
+if query: 
     with st.spinner("🌀 Triage in progress..."):
         try:
             logger.info(f"Processing query: {query[: 100]}...")
@@ -353,7 +394,7 @@ if query:
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
 
             # If Drive metadata inclusion is enabled, fetch and append metadata to context_text
-            if use_gdrive: 
+            if use_gdrive:  
                 try:
                     logger.info("Fetching Google Drive metadata...")
                     # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
@@ -361,9 +402,9 @@ if query:
                         logger.warning("Drive service is None - skipping Drive metadata")
                         st.warning("⚠️ Drive service not initialized. Drive metadata unavailable.")
                     else:
-                        drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k)
+                        drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k, search_query=query)
                         
-                        if drive_files:
+                        if drive_files: 
                             logger.info(f"Retrieved {len(drive_files)} files from Drive")
                             
                             # If the user directly asked for the most recent file, show it immediately
@@ -376,7 +417,7 @@ if query:
                                 
                                 logger.info(f"Displaying most recent file: {name}")
                                 st.success("Most recent file in the Drive (by created time):")
-                                st. write(f"- Name: **{name}**")
+                                st.write(f"- Name: **{name}**")
                                 st.write(f"- Created: {created}")
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
@@ -384,16 +425,16 @@ if query:
                             # Append drive metadata into context so LLMs can reference it
                             context_text += "\n---\nGoogleDrive Metadata (most recent items):\n"
                             for f in drive_files:
-                                owners = ", ".join([o. get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
-                                context_text += f"Name: {f. get('name')}\nCreated: {f. get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
+                                owners = ", ".join([o.get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
+                                context_text += f"Name: {f. get('name')}\nCreated: {f.get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
                                 logger.debug(f"Added to context: {f.get('name')}")
-                        else: 
+                        else:  
                             st.info("No files returned from the specified Drive (or insufficient permissions).")
                             logger.warning(f"No files returned from drive {drive_id_input}")
                         
                 except Exception as e_drive:
                     logger.error(f"Google Drive metadata fetch failed: {type(e_drive).__name__} - {str(e_drive)}", exc_info=True)
-                    st.error(f"❌ Google Drive metadata fetch failed: {str(e_drive)}")
+                    st. error(f"❌ Google Drive metadata fetch failed:  {str(e_drive)}")
 
             logger.info("Generating response from LLM...")
             raw_text, engine_used, logs = generate_response(context_text, query)
