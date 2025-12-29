@@ -62,7 +62,7 @@ RACRL_FOLDER_MAP = {
     },
     "Publications": {
         "folder_id": "E. 'ublications",
-        "keywords": ["publication", "research", "paper", "article", "mash"],
+        "keywords":  ["publication", "research", "paper", "article", "mash"],
         "priority": 5,
     },
     "SPUDS": {
@@ -87,7 +87,7 @@ RACRL_FOLDER_MAP = {
     },
     "Rulings": {
         "folder_id": "I. Other Rulings",
-        "keywords": ["ruling", "recommendation", "deck chair"],
+        "keywords":  ["ruling", "recommendation", "deck chair"],
         "priority": 9,
     },
     "History": {
@@ -222,7 +222,7 @@ def initialize_drive_service():
                 logger.info("Credentials refreshed successfully")
             else:
                 logger.debug("Credentials are valid, no refresh needed")
-        except Exception as e: 
+        except Exception as e:
             logger.error(
                 f"Failed to refresh credentials: {type(e).__name__} - {str(e)}"
             )
@@ -384,9 +384,9 @@ SYSTEM_PROMPT = (
     "1.Do not mention Tiers or classification labels in your response.\n"
     "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
     "3.DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:  'rink and learn.\n"
+    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase: 'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
-    "5.Format:   Direct answers only.No narrative, actions, or roleplay."
+    "5.Format:  Direct answers only.No narrative, actions, or roleplay."
 )
 
 
@@ -437,7 +437,7 @@ def generate_response(context, query):
             except Exception as e_hf:
                 debug_logs.append(f"HF: {str(e_hf)}")
                 return (
-                    "⚠️ SYSTEM FAILURE:  All protocols failed.",
+                    "⚠️ SYSTEM FAILURE: All protocols failed.",
                     "OFFLINE",
                     debug_logs,
                 )
@@ -453,7 +453,7 @@ def match_category(query_lower, folder_map):
 
     # Check subcategories FIRST (more specific)
     for category, info in folder_map.items():
-        if "subcategories" in info:
+        if "subcategories" in info: 
             for subcat_name, subcat_info in info["subcategories"].items():
                 subcat_keywords = subcat_info.get("keywords", [])
                 for keyword in subcat_keywords: 
@@ -497,7 +497,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
         raise RuntimeError(
-            "Drive service not initialized. Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
+            "Drive service not initialized.Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
         )
 
     try:
@@ -514,12 +514,12 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
-            if current_folder in searched_folders:
+            if current_folder in searched_folders: 
                 continue
 
             searched_folders.add(current_folder)
             folder_count += 1
-            logger.info(f"[FOLDER #{folder_count}] Searching:    {current_folder}")
+            logger.info(f"[FOLDER #{folder_count}] Searching:  {current_folder}")
 
             try:
                 query_string = f"'{current_folder}' in parents and trashed=false"
@@ -554,7 +554,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 continue
 
         logger.info(
-            f"Search complete:    Found {len(all_items)} files across {len(searched_folders)} folders"
+            f"Search complete:  Found {len(all_items)} files across {len(searched_folders)} folders"
         )
 
         # Display debug info in Streamlit UI
@@ -642,11 +642,32 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 if score > 0:
                     logger.debug(f"File:  {item.get('name')} - Score: {score}")
 
+            # ROBUST SORTING AND FILTERING (v18 FIX)
+            def get_modified_timestamp(item):
+                """Convert modifiedTime to timestamp for proper sorting."""
+                try:
+                    dt = datetime.fromisoformat(
+                        item.get("modifiedTime", "1970-01-01").replace("Z", "+00:00")
+                    )
+                    return dt.timestamp()
+                except Exception: 
+                    return 0
+
             scored_items.sort(
-                key=lambda x: (-x[0], x[1].get("modifiedTime", "")), reverse=True
+                key=lambda x: (-x[0], -get_modified_timestamp(x[1]))
             )
-            items = [item for _, item in scored_items[: top_k]]
-            logger.info(f"Top {len(items)} files after intelligent scoring")
+
+            # Filter to ONLY items with score > 0, then take top_k
+            items = [item for score, item in scored_items if score > 0][: top_k]
+
+            # If no items scored > 0, fall back to top by recency
+            if not items: 
+                logger.warning("No items matched search criteria, returning top by recency")
+                all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+                items = all_items[: top_k]
+                logger.info(f"Fallback: Returning top {len(items)} files by recency")
+            else:
+                logger.info(f"Top {len(items)} files after intelligent scoring (filtered for score > 0)")
 
             # Display WAHA scoring debug info in Streamlit
             if debug_info:
@@ -731,9 +752,9 @@ if query:
         }
 
         try:
-            logger.info(f"Processing query: {query[:  100]}...")
+            logger.info(f"Processing query: {query[: 100]}...")
 
-            # Shortcut:   if user specifically asks for the most recent file in the drive
+            # Shortcut:  if user specifically asks for the most recent file in the drive
             q_lower = query.lower()
             wants_most_recent = False
             if use_gdrive and (
@@ -923,7 +944,7 @@ if query:
             logger.info(f"Step 4: Query processing completed.Engine:  {engine_used}")
 
             # Always show developer mode search process details
-            if dev_mode:
+            if dev_mode: 
                 with st.expander("🔍 DEVELOPER MODE - SEARCH PROCESS ANALYSIS"):
                     st.markdown("### Search Process Timeline")
 
