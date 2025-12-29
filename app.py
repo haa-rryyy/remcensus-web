@@ -14,7 +14,7 @@ import traceback
 # Google Drive API imports
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
-from google. api_core.exceptions import GoogleAPICallError
+from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -23,14 +23,14 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s',
     handlers=[
-        logging. FileHandler('drive_service_debug.log'),
+        logging.FileHandler('drive_service_debug.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 
 logger = logging.getLogger(__name__)
 
-# --- 1. CONFIGURATION & SETUP ---
+# --- 1.CONFIGURATION & SETUP ---
 st.set_page_config(
     page_title="'Remcensus",
     page_icon="🦁",
@@ -41,22 +41,22 @@ st.set_page_config(
 # --- FOLDER STRUCTURE MAP (Update this when Drive changes) ---
 RACRL_FOLDER_MAP = {
     "Education": {
-        "folder_id": "A.    'Remducation",
+        "folder_id": "A. 'Remducation",
         "keywords": ["education", "curriculum", "learning", "training", "beginner"],
         "priority": 1
     },
     "Registry": {
-        "folder_id": "B.  The Registry",
+        "folder_id": "B. The Registry",
         "keywords": ["registry", "register", "national"],
         "priority": 2
     },
     "Puzzles": {
-        "folder_id": "C.  'uzzles",
+        "folder_id": "C. 'uzzles",
         "keywords": ["puzzle", "puzzles", "challenge", "scenario"],
         "priority": 3
     },
     "Exam Prep": {
-        "folder_id": "D.    Exam 'rep",
+        "folder_id": "D. Exam 'rep",
         "keywords": ["exam", "prep", "preparation", "curriculum", "variation"],
         "priority": 4
     },
@@ -66,12 +66,12 @@ RACRL_FOLDER_MAP = {
         "priority": 5
     },
     "SPUDS": {
-        "folder_id": "F.    SPUDS",
+        "folder_id": "F. SPUDS",
         "keywords": ["spuds", "guide", "hymn", "trial"],
         "priority": 6
     },
     "RANZCCP": {
-        "folder_id": "G.   RANZCCP",
+        "folder_id": "G. RANZCCP",
         "keywords": ["ranzccp", "establishment"],
         "priority": 7
     },
@@ -95,7 +95,7 @@ RACRL_FOLDER_MAP = {
         }
     },
     "Rulings": {
-        "folder_id": "I.  Other Rulings",
+        "folder_id": "I. Other Rulings",
         "keywords":  ["ruling", "recommendation", "deck chair"],
         "priority": 9
     },
@@ -125,10 +125,10 @@ YEAR_PRIORITY = {
 # --- GOOGLE DRIVE SERVICE INITIALIZATION ---
 def initialize_drive_service():
     """
-    Initialize Google Drive service with detailed error logging and debugging.  
+    Initialize Google Drive service with detailed error logging and debugging.
     
     Returns:
-        googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails. 
+        googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails.
     """
     try: 
         logger.info("=" * 80)
@@ -189,7 +189,7 @@ def initialize_drive_service():
             scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly']
             logger.debug(f"Using scopes: {scopes}")
             
-            credentials = Credentials. from_service_account_info(
+            credentials = Credentials.from_service_account_info(
                 cred_content,
                 scopes=scopes
             )
@@ -208,7 +208,7 @@ def initialize_drive_service():
         logger.info("Checking if credentials need refresh...")
         try:
             if not credentials.valid:
-                logger. debug("Credentials not valid, attempting refresh...")
+                logger.debug("Credentials not valid, attempting refresh...")
                 credentials.refresh(Request())
                 logger.info("Credentials refreshed successfully")
             else:
@@ -225,7 +225,7 @@ def initialize_drive_service():
             logger.debug(f"Service type: {type(service)}")
             
         except HttpError as e:
-            logger. error(f"HTTP error building Drive service: {e. resp.status} - {e.content}")
+            logger.error(f"HTTP error building Drive service: {e.resp.status} - {e.content}")
             return None
         except GoogleAPICallError as e:
             logger.error(f"Google API error building Drive service: {str(e)}")
@@ -260,7 +260,7 @@ def initialize_drive_service():
         return service
         
     except Exception as e:
-        logger. critical(f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}", exc_info=True)
+        logger.critical(f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}", exc_info=True)
         return None
 
 
@@ -283,7 +283,7 @@ if 'init_done' not in st.session_state:
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
         st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
-        st.session_state.groq_client = Groq(api_key=st. secrets["GROQ_API_KEY"])
+        st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
         logger.info("Pinecone and AI clients initialized successfully")
         
@@ -304,7 +304,7 @@ if 'init_done' not in st.session_state:
         st.error(f"🔐 Security Error: {e}")
         st.stop()
 
-# --- 2. LINGUISTIC TRANSFORMATION ENGINE ---
+# --- 2.LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
@@ -324,22 +324,22 @@ def enforce_rem_lexicon(text):
         text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
     return text
 
-# --- 3. UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
+# --- 3.UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
 SYSTEM_PROMPT = (
     "You are a neutral information retrieval system for the 'Remier League archives.\n\n"
     "Provide only factual, direct answers based on the context provided.\n"
     "Do not add narrative descriptions, actions, or roleplay elements.\n"
     "Do not use stage directions like *pauses*, *scribbles*, etc.\n"
     "Keep responses concise and informational.\n\n"
-    "1. Do not mention Tiers or classification labels in your response.\n"
-    "2. For simple identity queries, provide only an ontological definition.   Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.  DIDACTIC TEACHING:  Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase: 'rink and learn.\n"
+    "1.Do not mention Tiers or classification labels in your response.\n"
+    "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3.DIDACTIC TEACHING:  Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase: 'rink and learn.\n"
     "RESTRICTED TERMS:  Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
-    "5. Format:  Direct answers only. No narrative, actions, or roleplay."
+    "5.Format:  Direct answers only.No narrative, actions, or roleplay."
 )
 
-# --- 4. TRIPLE-ENGINE HANDLER ---
+# --- 4.TRIPLE-ENGINE HANDLER ---
 def generate_response(context, query):
     debug_logs = []
     try:
@@ -347,7 +347,7 @@ def generate_response(context, query):
             messages=[{"role": "system", "content":   SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
             model="llama-3.3-70b-versatile",
         )
-        return chat_completion.choices[0]. message.content, "Groq (Llama 3.3)", debug_logs
+        return chat_completion.choices[0].message.content, "Groq (Llama 3.3)", debug_logs
     except Exception as e:
         debug_logs.append(f"Groq:   {str(e)}")
         try:
@@ -370,10 +370,10 @@ def generate_response(context, query):
                 debug_logs.append(f"HF: {str(e_hf)}")
                 return "⚠️ SYSTEM FAILURE:   All protocols failed.", "OFFLINE", debug_logs
 
-# --- 5. FOLDER STRUCTURE INTELLIGENCE ---
+# --- 5.FOLDER STRUCTURE INTELLIGENCE ---
 def match_category(query_lower, folder_map):
     """
-    Intelligently match query to folder categories.  
+    Intelligently match query to folder categories.
     Returns tuple:   (category_name, subcategory_name or None, confidence_score)
     """
     best_match = (None, None, 0)
@@ -405,12 +405,12 @@ def extract_year(folder_name):
     folder_lower = folder_name.lower()
     
     for year_pattern, priority in YEAR_PRIORITY.items():
-        if year_pattern. lower() in folder_lower:
+        if year_pattern.lower() in folder_lower:
             return priority
     
     return 999
 
-# --- 6. GOOGLE DRIVE METADATA HELPER ---
+# --- 6.GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
     Fetch metadata with intelligent folder structure awareness.
@@ -420,7 +420,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.   Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
         logger.info(f"Fetching recent files from drive/folder {drive_id} with intelligent folder structure...")
@@ -428,7 +428,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         # Detect category intent from query
         category_match, subcategory_match, category_confidence = None, None, 0
         if search_query:
-            category_match, subcategory_match, category_confidence = match_category(search_query. lower(), RACRL_FOLDER_MAP)
+            category_match, subcategory_match, category_confidence = match_category(search_query.lower(), RACRL_FOLDER_MAP)
             logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}")
         
         all_items = []
@@ -459,7 +459,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 logger.debug(f"Found {len(items)} items in folder {current_folder}")
                 
                 for item in items:
-                    is_folder = item['mimeType'] == 'application/vnd.google-apps. folder'
+                    is_folder = item['mimeType'] == 'application/vnd.google-apps.folder'
                     
                     if is_folder:
                         # Always queue folders for searching, even if we're looking for files
@@ -468,14 +468,14 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     else: 
                         # Add files to results
                         all_items.append(item)
-                        logger. debug(f"Added file to results: {item['name']}")
+                        logger.debug(f"Added file to results: {item['name']}")
                         
             except HttpError as e:
-                logger. warning(f"Error searching folder {current_folder}: {e}")
+                logger.warning(f"Error searching folder {current_folder}: {e}")
                 continue
         
         logger.info(f"Successfully fetched {len(all_items)} files from folder/drive (searched {len(searched_folders)} folders)")
-        logger.debug(f"Files found: {[item. get('name') for item in all_items]}")
+        logger.debug(f"Files found: {[item.get('name') for item in all_items]}")
         
         if len(all_items) == 0:
             logger.warning("No files found in the entire folder hierarchy!")
@@ -520,7 +520,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 
                 scored_items.append((score, item))
                 if score > 0:
-                    logger.debug(f"File:   {item. get('name')} - Score: {score}")
+                    logger.debug(f"File:   {item.get('name')} - Score: {score}")
             
             # Sort by score (descending) then by modified time
             scored_items.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
@@ -539,11 +539,11 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     item["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
                     logger.warning(f"Failed to parse datetime {item['createdTime']}: {dt_e}")
-                    item["createdTimeISO"] = item. get("createdTime")
+                    item["createdTimeISO"] = item.get("createdTime")
             
             if "modifiedTime" in item:
                 try:
-                    dt = datetime.fromisoformat(item["modifiedTime"]. replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(item["modifiedTime"].replace("Z", "+00:00"))
                     item["modifiedTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
                     logger.warning(f"Failed to parse datetime {item['modifiedTime']}: {dt_e}")
@@ -552,16 +552,16 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         return items
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive items: {e.resp.status} - {e.content}")
+        logger.error(f"HTTP error fetching drive items: {e.resp.status} - {e.content}")
         raise
     except GoogleAPICallError as e:
         logger.error(f"Google API error fetching drive items: {str(e)}")
         raise
     except Exception as e:
-        logger. error(f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}", exc_info=True)
         raise
 
-# --- 7. MAIN INTERFACE ---
+# --- 7.MAIN INTERFACE ---
 query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
 
 if query:
@@ -594,8 +594,8 @@ if query:
 
             # Run embedding + pinecone retrieval
             logger.info("Step 1: Running Pinecone embedding and retrieval...")
-            result = st. session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
-            search_results = st.session_state.pc_index.query(vector=result. embeddings[0]. values, top_k=5, include_metadata=True)
+            result = st.session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
+            search_results = st.session_state.pc_index.query(vector=result.embeddings[0].values, top_k=5, include_metadata=True)
             context_text = ""
             
             for match in search_results['matches']:
@@ -603,7 +603,7 @@ if query:
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
                 search_process["pinecone_results"].append({
                     "source": meta.get('source', 'Unknown'),
-                    "score": match. get('score', 'N/A'),
+                    "score": match.get('score', 'N/A'),
                     "content_preview": meta.get('text', '')[: 100] + "..."
                 })
             
@@ -616,11 +616,11 @@ if query:
                     # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
                     if st.session_state.drive_service is None:
                         logger.warning("Drive service is None - skipping Drive metadata")
-                        st.warning("⚠️ Drive service not initialized. Drive metadata unavailable.")
+                        st.warning("⚠️ Drive service not initialized.Drive metadata unavailable.")
                         search_process["errors"].append("Drive service not initialized")
                     else:
                         logger.info("Step 2a: Detecting category intent from query...")
-                        category_match, subcategory_match, category_confidence = match_category(query. lower(), RACRL_FOLDER_MAP)
+                        category_match, subcategory_match, category_confidence = match_category(query.lower(), RACRL_FOLDER_MAP)
                         search_process["category_detection"] = {
                             "category": category_match,
                             "subcategory": subcategory_match,
@@ -637,7 +637,7 @@ if query:
                             for idx, f in enumerate(drive_files):
                                 search_process["drive_results"].append({
                                     "rank": idx + 1,
-                                    "name": f. get('name'),
+                                    "name": f.get('name'),
                                     "mime_type": f.get('mimeType'),
                                     "created":   f.get('createdTimeISO'),
                                     "modified": f.get('modifiedTimeISO'),
@@ -654,7 +654,7 @@ if query:
                                 
                                 logger.info(f"Displaying most recent file: {name}")
                                 st.success("Most recent file in the Drive (by relevance & recency):")
-                                st. write(f"- Name: **{name}**")
+                                st.write(f"- Name: **{name}**")
                                 st.write(f"- Created: {created}")
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
@@ -672,7 +672,7 @@ if query:
                         
                 except Exception as e_drive:
                     logger.error(f"Google Drive metadata fetch failed: {type(e_drive).__name__} - {str(e_drive)}", exc_info=True)
-                    search_process["errors"]. append(f"Drive fetch error: {type(e_drive).__name__} - {str(e_drive)}")
+                    search_process["errors"].append(f"Drive fetch error: {type(e_drive).__name__} - {str(e_drive)}")
                     
                     error_msg = f"❌ Google Drive metadata fetch failed: {str(e_drive)}"
                     st.error(error_msg)
@@ -704,7 +704,7 @@ if query:
                     for log in logs:
                         st.code(log)
             
-            logger.info(f"Step 4: Query processing completed.   Engine:   {engine_used}")
+            logger.info(f"Step 4: Query processing completed.Engine:   {engine_used}")
             
             # Always show developer mode search process details
             if dev_mode:  
@@ -713,9 +713,9 @@ if query:
                     
                     # Query information
                     st.markdown("#### 1️⃣ Query Information")
-                    col1, col2 = st. columns(2)
+                    col1, col2 = st.columns(2)
                     with col1:
-                        st. write(f"**Query:** `{search_process['query']}`")
+                        st.write(f"**Query:** `{search_process['query']}`")
                         st.write(f"**Timestamp:** {search_process['timestamp']}")
                     with col2:
                         st.write(f"**Drive Search Enabled:** {search_process['use_gdrive']}")
@@ -731,11 +731,11 @@ if query:
                     
                     # Pinecone results
                     if search_process['pinecone_results']:
-                        st. markdown("#### 3️⃣ Pinecone Vector Search Results")
+                        st.markdown("#### 3️⃣ Pinecone Vector Search Results")
                         for idx, result in enumerate(search_process['pinecone_results'], 1):
                             with st.container():
                                 st.write(f"**Result {idx}**")
-                                col1, col2 = st. columns([3, 1])
+                                col1, col2 = st.columns([3, 1])
                                 with col1:
                                     st.write(f"Source: `{result['source']}`")
                                     st.write(f"Preview: {result['content_preview']}")
@@ -744,7 +744,7 @@ if query:
                     
                     # Drive results
                     if search_process['drive_results']:
-                        st. markdown("#### 4️⃣ Google Drive Search Results (Ranked by Algorithm)")
+                        st.markdown("#### 4️⃣ Google Drive Search Results (Ranked by Algorithm)")
                         for result in search_process['drive_results']:
                             with st.container():
                                 st.write(f"**#{result['rank']}** - {result['name']}")
@@ -753,7 +753,7 @@ if query:
                                     st.write(f"Type: `{result['mime_type']}`")
                                     st.write(f"Created: {result['created']}")
                                 with col2:
-                                    st. write(f"Modified: {result['modified']}")
+                                    st.write(f"Modified: {result['modified']}")
                                 st.write(f"Link: {result['link']}")
                     
                     # LLM Engine
@@ -798,15 +798,15 @@ if query:
                     
                     # Show all relevant session state
                     st.markdown("### Session State")
-                    st.write(f"**Drive Service Initialized:** {st.session_state. drive_service is not None}")
+                    st.write(f"**Drive Service Initialized:** {st.session_state.drive_service is not None}")
                     st.write(f"**Pinecone Index Ready:** {hasattr(st.session_state, 'pc_index')}")
-                    st.write(f"**Google Client Ready:** {hasattr(st. session_state, 'google_client')}")
-                    st.write(f"**Groq Client Ready:** {hasattr(st. session_state, 'groq_client')}")
+                    st.write(f"**Google Client Ready:** {hasattr(st.session_state, 'google_client')}")
+                    st.write(f"**Groq Client Ready:** {hasattr(st.session_state, 'groq_client')}")
                     st.write(f"**HuggingFace Client Ready:** {hasattr(st.session_state, 'hf_client')}")
                     
                     # Show stack trace
                     st.markdown("### Stack Trace")
-                    st. code(traceback.format_exc())
+                    st.code(traceback.format_exc())
                     
                     # Show search process so far
                     st.markdown("### Search Process Before Error")
