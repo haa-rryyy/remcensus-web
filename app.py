@@ -497,34 +497,13 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
         raise RuntimeError(
-            "Drive service not initialized.   Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
+            "Drive service not initialized.    Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
         )
 
     try:
         logger.info(
             f"Fetching recent files from drive/folder {drive_id} with intelligent folder structure..."
         )
-
-        if search_query:
-            category_match, subcategory_match, category_confidence = match_category(
-                search_query.lower(), RACRL_FOLDER_MAP
-            )
-    
-            search_terms = [
-                term for term in search_query.lower().split() if len(term) > 2
-            ]
-            scored_items = []
-
-            logger.info(
-                f"Scoring {len(all_items)} files against search terms: {search_terms}"
-            )
-
-            for item in all_items:
-                name_lower = item.get("name", "").lower()
-
-            logger.info(
-                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}"
-            )
 
         all_items = []
         folders_to_search = [drive_id]
@@ -535,12 +514,12 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
-            if current_folder in searched_folders: 
+            if current_folder in searched_folders:
                 continue
 
             searched_folders.add(current_folder)
             folder_count += 1
-            logger.info(f"[FOLDER #{folder_count}] Searching:  {current_folder}")
+            logger.info(f"[FOLDER #{folder_count}] Searching:   {current_folder}")
 
             try:
                 query_string = f"'{current_folder}' in parents and trashed=false"
@@ -558,7 +537,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 items = resp.get("files", [])
                 logger.info(f"  -> Found {len(items)} items")
 
-                for item in items:
+                for item in items: 
                     name = item.get("name", "UNKNOWN")
                     mime = item.get("mimeType", "UNKNOWN")
                     is_folder = mime == "application/vnd.google-apps.folder"
@@ -566,7 +545,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     if is_folder:
                         logger.info(f"    [FOLDER] {name}")
                         folders_to_search.append(item["id"])
-                    else:
+                    else: 
                         logger.info(f"    [FILE] {name}")
                         all_items.append(item)
 
@@ -575,7 +554,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 continue
 
         logger.info(
-            f"Search complete:  Found {len(all_items)} files across {len(searched_folders)} folders"
+            f"Search complete:   Found {len(all_items)} files across {len(searched_folders)} folders"
         )
 
         # Display debug info in Streamlit UI
@@ -590,6 +569,17 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
         all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
 
+        # NOW DETECT CATEGORY (after all_items exists)
+        category_match, subcategory_match, category_confidence = None, None, 0
+        if search_query:
+            category_match, subcategory_match, category_confidence = match_category(
+                search_query.lower(), RACRL_FOLDER_MAP
+            )
+            logger.info(
+                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}"
+            )
+
+        # NOW SCORE AND FILTER
         if search_query:
             search_terms = [
                 term for term in search_query.lower().split() if len(term) > 2
@@ -636,7 +626,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
                 scored_items.append((score, item))
                 if score > 0:
-                    logger.debug(f"File:  {item.get('name')} - Score: {score}")
+                    logger.debug(f"File:   {item.get('name')} - Score: {score}")
 
             scored_items.sort(
                 key=lambda x: (-x[0], x[1].get("modifiedTime", "")), reverse=True
@@ -659,7 +649,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     item["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
                     logger.warning(
-                        f"Failed to parse datetime {item['createdTime']}:  {dt_e}"
+                        f"Failed to parse datetime {item['createdTime']}:   {dt_e}"
                     )
                     item["createdTimeISO"] = item.get("createdTime")
 
