@@ -486,10 +486,10 @@ def extract_year(folder_name):
     return 999
 
 
-# --- 6.GOOGLE DRIVE METADATA HELPER ---
+# --- 6. GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
-    Fetch metadata with intelligent folder structure awareness.
+    Fetch metadata with intelligent folder structure awareness. 
     Uses RACRL_FOLDER_MAP to understand hierarchy and prioritize results.
     Returns ONLY files, not folders (unless explicitly requested).
     """
@@ -497,7 +497,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
         raise RuntimeError(
-            "Drive service not initialized.    Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
+            "Drive service not initialized.     Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
         )
 
     try:
@@ -507,7 +507,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
         # Detect category intent from query
         category_match, subcategory_match, category_confidence = None, None, 0
-        if search_query:
+        if search_query: 
             category_match, subcategory_match, category_confidence = match_category(
                 search_query.lower(), RACRL_FOLDER_MAP
             )
@@ -518,17 +518,19 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         all_items = []
         folders_to_search = [drive_id]
         searched_folders = set()
+        folder_count = 0
 
         # Recursively search through ALL folders to find files
         logger.info("Starting recursive folder traversal...")
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
-            if current_folder in searched_folders:
+            if current_folder in searched_folders: 
                 continue
 
             searched_folders.add(current_folder)
-            logger.debug(f"Searching folder: {current_folder}")
+            folder_count += 1
+            logger.info(f"[FOLDER #{folder_count}] Searching:  {current_folder}")
 
             try:
                 query_string = f"'{current_folder}' in parents and trashed=false"
@@ -544,28 +546,29 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 )
 
                 items = resp.get("files", [])
-                logger.debug(f"Found {len(items)} items in folder {current_folder}")
+                logger.info(f"  -> Found {len(items)} items")
 
-                for item in items:
-                    is_folder = item["mimeType"] == "application/vnd.google-apps.folder"
+                for item in items: 
+                    name = item.get("name", "UNKNOWN")
+                    mime = item.get("mimeType", "UNKNOWN")
+                    is_folder = mime == "application/vnd.google-apps.folder"
 
                     if is_folder:
                         # Always queue folders for searching
+                        logger.info(f"    [FOLDER] {name}")
                         folders_to_search.append(item["id"])
-                        logger.debug(f"Added subfolder to search queue: {item['name']}")
                     else:
                         # Add files to results
+                        logger.info(f"    [FILE] {name}")
                         all_items.append(item)
-                        logger.debug(f"Added file to results: {item['name']}")
 
             except HttpError as e:
                 logger.warning(f"Error searching folder {current_folder}: {e}")
                 continue
 
         logger.info(
-            f"Successfully fetched {len(all_items)} files from folder/drive (searched {len(searched_folders)} folders)"
+            f"Search complete:  Found {len(all_items)} files across {len(searched_folders)} folders"
         )
-        logger.debug(f"Files found: {[item.get('name') for item in all_items]}")
         logger.info(f"ALL FILES FOUND (BEFORE SCORING): {len(all_items)} files")
         for f in all_items:
             logger.info(f"  - {f.get('name')}")
@@ -584,7 +587,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             scored_items = []
 
             logger.info(
-                f"Scoring {len(all_items)} files against search terms:    {search_terms}"
+                f"Scoring {len(all_items)} files against search terms:     {search_terms}"
             )
 
             for item in all_items:
@@ -597,8 +600,8 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 score = 0
 
                 # Base scoring on filename/description
-                for term in search_terms:
-                    if term in name_lower:
+                for term in search_terms: 
+                    if term in name_lower: 
                         score += 3
                     if term in desc_lower:
                         score += 1
@@ -612,7 +615,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                         score += 5
 
                     # EXTRA boost for subcategory match (this is the key!)
-                    if subcategory_match and "subcategories" in category_info:
+                    if subcategory_match and "subcategories" in category_info: 
                         subcat_info = category_info["subcategories"].get(
                             subcategory_match, {}
                         )
@@ -637,7 +640,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 ),
                 reverse=True,
             )
-            items = [item for _, item in scored_items[:top_k]]
+            items = [item for _, item in scored_items[: top_k]]
             logger.info(f"Top {len(items)} files after intelligent scoring")
             logger.debug(f"Top files: {[f.get('name') for f in items]}")
         else:
@@ -654,28 +657,28 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                         item["createdTime"].replace("Z", "+00:00")
                     )
                     item["createdTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
+                except Exception as dt_e: 
                     logger.warning(
                         f"Failed to parse datetime {item['createdTime']}: {dt_e}"
                     )
                     item["createdTimeISO"] = item.get("createdTime")
 
-            if "modifiedTime" in item:
+            if "modifiedTime" in item: 
                 try:
                     dt = datetime.fromisoformat(
                         item["modifiedTime"].replace("Z", "+00:00")
                     )
                     item["modifiedTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
+                except Exception as dt_e: 
                     logger.warning(
-                        f"Failed to parse datetime {item['modifiedTime']}: {dt_e}"
+                        f"Failed to parse datetime {item['modifiedTime']}:  {dt_e}"
                     )
                     item["modifiedTimeISO"] = item.get("modifiedTime")
 
         return items
 
     except HttpError as e:
-        logger.error(f"HTTP error fetching drive items: {e.resp.status} - {e.content}")
+        logger.error(f"HTTP error fetching drive items:  {e.resp.status} - {e.content}")
         raise
     except GoogleAPICallError as e:
         logger.error(f"Google API error fetching drive items: {str(e)}")
