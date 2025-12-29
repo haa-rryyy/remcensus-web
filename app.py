@@ -65,7 +65,7 @@ RACRL_FOLDER_MAP = {
     },
     "Publications": {
         "folder_id": "E. 'ublications",
-        "keywords":  ["publication", "research", "paper", "article", "mash"],
+        "keywords":   ["publication", "research", "paper", "article", "mash"],
         "priority": 5,
     },
     "SPUDS": {
@@ -84,13 +84,13 @@ RACRL_FOLDER_MAP = {
         "priority": 8,
         "subcategories": {
             "NHA": {"keywords": ["nha", "national high able"], "priority": 1},
-            "VHA": {"keywords":  ["vha", "victorian high able"], "priority": 2},
+            "VHA": {"keywords":   ["vha", "victorian high able"], "priority": 2},
             "WAHA": {"keywords": ["waha", "western"], "priority": 3},
         },
     },
     "Rulings": {
         "folder_id": "I. Other Rulings",
-        "keywords":  ["ruling", "recommendation", "deck chair"],
+        "keywords":   ["ruling", "recommendation", "deck chair"],
         "priority": 9,
     },
     "History": {
@@ -113,7 +113,7 @@ YEAR_PRIORITY = {
     "2015": 9,
     "2010": 10,
     "pre-2015": 11,
-    "old":  12,
+    "old":   12,
 }
 
 
@@ -125,7 +125,7 @@ def initialize_drive_service():
     Returns:
         googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails.
     """
-    try:
+    try: 
         logger.info("=" * 80)
         logger.info("Starting Google Drive Service Initialization")
         logger.info("=" * 80)
@@ -188,7 +188,7 @@ def initialize_drive_service():
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse credentials JSON: {str(e)}")
             return None
-        except Exception as e: 
+        except Exception as e:  
             logger.error(
                 f"Unexpected error parsing credentials: {type(e).__name__} - {str(e)}"
             )
@@ -251,9 +251,9 @@ def initialize_drive_service():
         except GoogleAPICallError as e:
             logger.error(f"Google API error building Drive service: {str(e)}")
             return None
-        except Exception as e: 
+        except Exception as e:  
             logger.error(
-                f"Unexpected error building Drive service:  {type(e).__name__} - {str(e)}"
+                f"Unexpected error building Drive service:   {type(e).__name__} - {str(e)}"
             )
             return None
 
@@ -274,7 +274,7 @@ def initialize_drive_service():
                 f"HTTP error testing Drive service: {e.resp.status} - {e.content}"
             )
             return None
-        except Exception as e: 
+        except Exception as e:  
             logger.error(f"Error testing Drive service: {type(e).__name__} - {str(e)}")
             return None
 
@@ -284,7 +284,7 @@ def initialize_drive_service():
 
         return service
 
-    except Exception as e: 
+    except Exception as e:  
         logger.critical(
             f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}",
             exc_info=True,
@@ -298,8 +298,8 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
     Extract content from Google Drive files (Google Docs, PDFs, Google Sheets).
     
     Args:
-        drive_service:  Authenticated Drive service
-        file_id: ID of the file to extract from
+        drive_service:   Authenticated Drive service
+        file_id:  ID of the file to extract from
         mime_type: MIME type of the file
         file_name: Name of the file
     
@@ -307,7 +307,7 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
         tuple: (content_text, success_bool, error_message)
     """
     try:
-        logger.info(f"Extracting content from:  {file_name} (MIME: {mime_type})")
+        logger.info(f"Extracting content from:   {file_name} (MIME: {mime_type})")
         
         # Google Docs
         if "vnd.google-apps.document" in mime_type:
@@ -321,7 +321,7 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 logger.info(f"Successfully extracted Google Docs content ({len(content)} chars)")
                 return content, True, None
             except Exception as e:
-                logger.error(f"Failed to extract Google Docs:  {str(e)}")
+                logger.error(f"Failed to extract Google Docs:   {str(e)}")
                 return "", False, f"Google Docs extraction failed: {str(e)}"
         
         # Google Sheets
@@ -336,11 +336,11 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 logger.info(f"Successfully extracted Google Sheets content ({len(content)} chars)")
                 return content, True, None
             except Exception as e:
-                logger.error(f"Failed to extract Google Sheets: {str(e)}")
+                logger.error(f"Failed to extract Google Sheets:  {str(e)}")
                 return "", False, f"Google Sheets extraction failed: {str(e)}"
         
         # PDF files
-        elif "application/pdf" in mime_type: 
+        elif "application/pdf" in mime_type:  
             logger.debug("Detected PDF format")
             try:
                 # Download PDF to memory
@@ -351,7 +351,7 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 
                 while not done:
                     status, done = downloader.next_chunk()
-                    if status: 
+                    if status:  
                         logger.debug(f"Download progress: {int(status.progress() * 100)}%")
                 
                 file_stream.seek(0)
@@ -370,7 +370,7 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 logger.info(f"Successfully extracted PDF content ({len(content)} chars from {len(pdf_reader.pages)} pages)")
                 return content, True, None
             except Exception as e:
-                logger.error(f"Failed to extract PDF: {str(e)}")
+                logger.error(f"Failed to extract PDF:  {str(e)}")
                 return "", False, f"PDF extraction failed: {str(e)}"
         
         # Microsoft Word (.docx)
@@ -388,7 +388,7 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 file_stream.seek(0)
                 
                 # Try to extract using python-docx
-                try: 
+                try:  
                     from docx import Document
                     doc = Document(file_stream)
                     content = "\n".join([para.text for para in doc.paragraphs])
@@ -399,16 +399,16 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                     return "[DOCX file content - unable to extract without python-docx library]", True, "DOCX extraction limited"
             except Exception as e:
                 logger.error(f"Failed to extract DOCX: {str(e)}")
-                return "", False, f"DOCX extraction failed:  {str(e)}"
+                return "", False, f"DOCX extraction failed:   {str(e)}"
         
         # Unsupported format
-        else: 
+        else:  
             logger.warning(f"Unsupported MIME type: {mime_type}")
             return "", False, f"Unsupported file format: {mime_type}"
     
-    except Exception as e: 
+    except Exception as e:  
         logger.error(f"Unexpected error extracting file content: {type(e).__name__} - {str(e)}")
-        return "", False, f"Unexpected error:  {str(e)}"
+        return "", False, f"Unexpected error:   {str(e)}"
 
 
 # Sidebar controls for Google Drive integration
@@ -451,7 +451,7 @@ if "init_done" not in st.session_state:
         logger.info("Initializing Google Drive service...")
         st.session_state.drive_service = initialize_drive_service()
 
-        if st.session_state.drive_service: 
+        if st.session_state.drive_service:  
             logger.info("Drive service initialized successfully")
         else:
             logger.warning(
@@ -461,7 +461,7 @@ if "init_done" not in st.session_state:
         st.session_state.init_done = True
         logger.info("Session initialization completed")
 
-    except Exception as e: 
+    except Exception as e:  
         logger.error(f"Security/Initialization Error: {e}", exc_info=True)
         st.error(f"🔐 Security Error: {e}")
         st.stop()
@@ -509,10 +509,10 @@ SYSTEM_PROMPT = (
     "Keep responses concise and informational.\n\n"
     "1.Do not mention Tiers or classification labels in your response.\n"
     "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:  'rink and learn.\n"
+    "3.DIDACTIC TEACHING:  Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite:  20, 21, 37, 42, 45, 53].\n"
+    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:   'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
-    "5.Format:  Direct answers only.No narrative, actions, or roleplay."
+    "5.Format:   Direct answers only.No narrative, actions, or roleplay."
 )
 
 
@@ -532,8 +532,8 @@ def generate_response(context, query):
             "Groq (Llama 3.3)",
             debug_logs,
         )
-    except Exception as e: 
-        debug_logs.append(f"Groq:  {str(e)}")
+    except Exception as e:  
+        debug_logs.append(f"Groq:   {str(e)}")
         try:
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -563,7 +563,7 @@ def generate_response(context, query):
             except Exception as e_hf:
                 debug_logs.append(f"HF: {str(e_hf)}")
                 return (
-                    "⚠️ SYSTEM FAILURE:  All protocols failed.",
+                    "⚠️ SYSTEM FAILURE: All protocols failed.",
                     "OFFLINE",
                     debug_logs,
                 )
@@ -573,19 +573,19 @@ def generate_response(context, query):
 def match_category(query_lower, folder_map):
     """
     Intelligently match query to folder categories.
-    Returns tuple: (category_name, subcategory_name or None, confidence_score)
+    Returns tuple:   (category_name, subcategory_name or None, confidence_score)
     """
     best_match = (None, None, 0)
 
     # Check subcategories FIRST (more specific)
     for category, info in folder_map.items():
-        if "subcategories" in info:
+        if "subcategories" in info: 
             for subcat_name, subcat_info in info["subcategories"].items():
                 subcat_keywords = subcat_info.get("keywords", [])
-                for keyword in subcat_keywords: 
-                    if keyword in query_lower: 
+                for keyword in subcat_keywords:  
+                    if keyword in query_lower:  
                         confidence = len(keyword) / len(query_lower)
-                        if confidence > best_match[2]: 
+                        if confidence > best_match[2]:  
                             best_match = (category, subcat_name, confidence)
 
     # Check main categories ONLY if no subcategory matched
@@ -640,12 +640,12 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
-            if current_folder in searched_folders: 
+            if current_folder in searched_folders:  
                 continue
 
             searched_folders.add(current_folder)
             folder_count += 1
-            logger.info(f"[FOLDER #{folder_count}] Searching:  {current_folder}")
+            logger.info(f"[FOLDER #{folder_count}] Searching:   {current_folder}")
 
             try:
                 query_string = f"'{current_folder}' in parents and trashed=false"
@@ -663,7 +663,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 items = resp.get("files", [])
                 logger.info(f"  -> Found {len(items)} items")
 
-                for item in items: 
+                for item in items:  
                     name = item.get("name", "UNKNOWN")
                     mime = item.get("mimeType", "UNKNOWN")
                     is_folder = mime == "application/vnd.google-apps.folder"
@@ -671,7 +671,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     if is_folder:
                         logger.info(f"    [FOLDER] {name}")
                         folders_to_search.append(item["id"])
-                    else: 
+                    else:  
                         logger.info(f"    [FILE] {name}")
                         all_items.append(item)
 
@@ -680,7 +680,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 continue
 
         logger.info(
-            f"Search complete:  Found {len(all_items)} files across {len(searched_folders)} folders"
+            f"Search complete:   Found {len(all_items)} files across {len(searched_folders)} folders"
         )
 
         # Display debug info in Streamlit UI
@@ -728,13 +728,13 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
                 # Base scoring on filename/description
                 for term in search_terms:
-                    if term in name_lower: 
+                    if term in name_lower:  
                         score += 3
                     if term in desc_lower:
                         score += 1
 
                 # Boost score if item matches detected category
-                if category_match: 
+                if category_match:  
                     category_info = RACRL_FOLDER_MAP.get(category_match, {})
                     if any(
                         kw in name_lower for kw in category_info.get("keywords", [])
@@ -754,19 +754,19 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 scored_items.append((score, item))
 
                 # COLLECT DEBUG INFO FOR WAHA/MEETING/MINUTES FILES ONLY
-                if "waha" in name_lower or "meeting" in name_lower or "minutes" in name_lower: 
+                if "waha" in name_lower or "meeting" in name_lower or "minutes" in name_lower:  
                     debug_info.append({
                         "filename": item.get("name"),
                         "score": score,
                         "category_match": category_match,
-                        "subcategory_match":  subcategory_match,
+                        "subcategory_match":   subcategory_match,
                         "has_waha_keyword": any(kw in name_lower for kw in RACRL_FOLDER_MAP.get("Minutes", {}).get("subcategories", {}).get("WAHA", {}).get("keywords", [])),
-                        "category_keywords":  RACRL_FOLDER_MAP.get(category_match, {}).get("keywords", []) if category_match else [],
-                        "subcategory_keywords":  RACRL_FOLDER_MAP.get(category_match, {}).get("subcategories", {}).get(subcategory_match, {}).get("keywords", []) if category_match and subcategory_match else [],
+                        "category_keywords":   RACRL_FOLDER_MAP.get(category_match, {}).get("keywords", []) if category_match else [],
+                        "subcategory_keywords":   RACRL_FOLDER_MAP.get(category_match, {}).get("subcategories", {}).get(subcategory_match, {}).get("keywords", []) if category_match and subcategory_match else [],
                     })
 
                 if score > 0:
-                    logger.debug(f"File:  {item.get('name')} - Score: {score}")
+                    logger.debug(f"File:   {item.get('name')} - Score: {score}")
 
             # ROBUST SORTING AND FILTERING (v18 FIX)
             def get_modified_timestamp(item):
@@ -776,7 +776,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                         item.get("modifiedTime", "1970-01-01").replace("Z", "+00:00")
                     )
                     return dt.timestamp()
-                except Exception: 
+                except Exception:  
                     return 0
 
             scored_items.sort(
@@ -784,14 +784,14 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             )
 
             # Filter to ONLY items with score > 0, then take top_k
-            items = [item for score, item in scored_items if score > 0][:  top_k]
+            items = [item for score, item in scored_items if score > 0][: top_k]
 
             # If no items scored > 0, fall back to top by recency
-            if not items: 
+            if not items:  
                 logger.warning("No items matched search criteria, returning top by recency")
                 all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
-                items = all_items[: top_k]
-                logger.info(f"Fallback: Returning top {len(items)} files by recency")
+                items = all_items[:top_k]
+                logger.info(f"Fallback:  Returning top {len(items)} files by recency")
             else:
                 logger.info(f"Top {len(items)} files after intelligent scoring (filtered for score > 0)")
 
@@ -823,12 +823,12 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     item["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
                     logger.warning(
-                        f"Failed to parse datetime {item['createdTime']}:  {dt_e}"
+                        f"Failed to parse datetime {item['createdTime']}:   {dt_e}"
                     )
                     item["createdTimeISO"] = item.get("createdTime")
 
             if "modifiedTime" in item:
-                try: 
+                try:  
                     dt = datetime.fromisoformat(
                         item["modifiedTime"].replace("Z", "+00:00")
                     )
@@ -882,7 +882,7 @@ if query:
         try:
             logger.info(f"Processing query: {query[: 100]}...")
 
-            # Shortcut:  if user specifically asks for the most recent file in the drive
+            # Shortcut:    if user specifically asks for the most recent file in the drive
             q_lower = query.lower()
             wants_most_recent = False
             if use_gdrive and (
@@ -911,14 +911,14 @@ if query:
                     {
                         "source": meta.get("source", "Unknown"),
                         "score": match.get("score", "N/A"),
-                        "content_preview": meta.get("text", "")[: 100] + "...",
+                        "content_preview": meta.get("text", "")[:100] + "...",
                     }
                 )
 
             logger.info(f"Pinecone returned {len(search_results['matches'])} results")
 
             # If Drive metadata inclusion is enabled, fetch and append metadata to context_text
-            if use_gdrive: 
+            if use_gdrive:  
                 try:
                     logger.info("Step 2: Fetching Google Drive metadata...")
                     # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
@@ -936,9 +936,9 @@ if query:
                             match_category(query.lower(), RACRL_FOLDER_MAP)
                         )
                         search_process["category_detection"] = {
-                            "category":  category_match,
+                            "category":   category_match,
                             "subcategory": subcategory_match,
-                            "confidence":  category_confidence,
+                            "confidence":   category_confidence,
                         }
                         logger.info(
                             f"Category detected: {category_match} > {subcategory_match} (confidence: {category_confidence:.2f})"
@@ -952,7 +952,7 @@ if query:
                         # ADD THIS DEBUG OUTPUT
                         st.write("🔍 DEBUG INFO:")
                         st.write(
-                            f"Number of files returned:  {len(drive_files) if drive_files else 0}"
+                            f"Number of files returned:   {len(drive_files) if drive_files else 0}"
                         )
                         if drive_files:
                             st.write("Files found:")
@@ -970,7 +970,7 @@ if query:
                                         "rank": idx + 1,
                                         "name": f.get("name"),
                                         "mime_type": f.get("mimeType"),
-                                        "created":  f.get("createdTimeISO"),
+                                        "created":   f.get("createdTimeISO"),
                                         "modified": f.get("modifiedTimeISO"),
                                         "link": f.get("webViewLink"),
                                     }
@@ -999,42 +999,40 @@ if query:
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
 
-                            # Extract content from files if enabled
-                            if extract_content: 
-                                logger.info("Step 2d: Extracting file content...")
-                                st.write("### 📄 Extracting file content...")
-                                extraction_progress = st.progress(0)
+                            # Extract content from ONLY THE FIRST (most recent) file if enabled
+                            if extract_content and len(drive_files) > 0:
+                                logger.info("Step 2d: Extracting content from the most recent file...")
+                                st.write("### 📄 Extracting file content from most recent file...")
+                                
+                                # Get the first (most recent) file
+                                first_file = drive_files[0]
+                                file_id = first_file.get("id")
+                                file_name = first_file.get("name")
+                                mime_type = first_file.get("mimeType")
 
-                                for idx, f in enumerate(drive_files):
-                                    file_id = f.get("id")
-                                    file_name = f.get("name")
-                                    mime_type = f.get("mimeType")
+                                logger.info(f"Extracting content from:   {file_name}")
+                                content, success, error = extract_file_content(
+                                    st.session_state.drive_service,
+                                    file_id,
+                                    mime_type,
+                                    file_name,
+                                )
 
-                                    logger.info(f"Extracting content from:  {file_name}")
-                                    content, success, error = extract_file_content(
-                                        st.session_state.drive_service,
-                                        file_id,
-                                        mime_type,
-                                        file_name,
+                                if success:  
+                                    st.write(f"✅ Extracted:   {file_name}")
+                                    search_process["extracted_content"].append({
+                                        "filename": file_name,
+                                        "mime_type": mime_type,
+                                        "content_preview": content[:200] + "...",
+                                        "content_length": len(content),
+                                    })
+                                    # Add extracted content to context (limit to first 10000 chars)
+                                    context_text += f"\n\n--- Content from {file_name} ---\n{content[:10000]}\n"
+                                else:
+                                    st.write(f"⚠️ Failed to extract:   {file_name} - {error}")
+                                    search_process["errors"].append(
+                                        f"Content extraction failed for {file_name}:  {error}"
                                     )
-
-                                    if success: 
-                                        st.write(f"✅ Extracted:  {file_name}")
-                                        search_process["extracted_content"].append({
-                                            "filename": file_name,
-                                            "mime_type": mime_type,
-                                            "content_preview": content[:200] + "...",
-                                            "content_length": len(content),
-                                        })
-                                        # Add extracted content to context
-                                        context_text += f"\n\n--- Content from {file_name} ---\n{content[: 5000]}\n"
-                                    else:
-                                        st.write(f"⚠️ Failed to extract:  {file_name} - {error}")
-                                        search_process["errors"].append(
-                                            f"Content extraction failed for {file_name}: {error}"
-                                        )
-
-                                    extraction_progress.progress((idx + 1) / len(drive_files))
 
                             # Append drive metadata into context so LLMs can reference it
                             context_text += (
@@ -1106,10 +1104,10 @@ if query:
                     for log in logs:
                         st.code(log)
 
-            logger.info(f"Step 4: Query processing completed.Engine:  {engine_used}")
+            logger.info(f"Step 4: Query processing completed.Engine:   {engine_used}")
 
             # Always show developer mode search process details
-            if dev_mode: 
+            if dev_mode:  
                 with st.expander("🔍 DEVELOPER MODE - SEARCH PROCESS ANALYSIS"):
                     st.markdown("### Search Process Timeline")
 
@@ -1136,7 +1134,7 @@ if query:
                         )
 
                     # Pinecone results
-                    if search_process["pinecone_results"]:
+                    if search_process["pinecone_results"]: 
                         st.markdown("#### 3️⃣ Pinecone Vector Search Results")
                         for idx, result in enumerate(
                             search_process["pinecone_results"], 1
@@ -1168,7 +1166,7 @@ if query:
 
                     # Extracted content
                     if search_process["extracted_content"]:
-                        st.markdown("#### 4️⃣ Extracted File Content")
+                        st.markdown("#### 4️⃣ Extracted File Content (Most Recent Only)")
                         for content in search_process["extracted_content"]:
                             with st.container():
                                 st.write(f"**{content['filename']}**")
@@ -1186,7 +1184,7 @@ if query:
                     # Errors (if any)
                     if search_process["errors"]:
                         st.markdown("#### ⚠️ Errors Encountered")
-                        for error in search_process["errors"]: 
+                        for error in search_process["errors"]:  
                             st.error(error)
                     else:
                         st.success(
