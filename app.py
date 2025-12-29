@@ -497,7 +497,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
         raise RuntimeError(
-            "Drive service not initialized.Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
+            "Drive service not initialized.   Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
         )
 
     try:
@@ -507,7 +507,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
         # Detect category intent from query
         category_match, subcategory_match, category_confidence = None, None, 0
-        if search_query:
+        if search_query: 
             category_match, subcategory_match, category_confidence = match_category(
                 search_query.lower(), RACRL_FOLDER_MAP
             )
@@ -547,7 +547,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 items = resp.get("files", [])
                 logger.info(f"  -> Found {len(items)} items")
 
-                for item in items: 
+                for item in items:
                     name = item.get("name", "UNKNOWN")
                     mime = item.get("mimeType", "UNKNOWN")
                     is_folder = mime == "application/vnd.google-apps.folder"
