@@ -15,8 +15,8 @@ import traceback
 from google.auth.transport. requests import Request
 from google.oauth2.service_account import Credentials
 from google. api_core.exceptions import GoogleAPICallError
-from googleapiclient. discovery import build
-from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
+from googleapiclient. errors import HttpError
 
 # Configure logging with detailed formatting
 logging.basicConfig(
@@ -38,10 +38,94 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- FOLDER STRUCTURE MAP (Update this when Drive changes) ---
+RACRL_FOLDER_MAP = {
+    "Education": {
+        "folder_id": "A.  'Remducation",
+        "keywords": ["education", "curriculum", "learning", "training", "beginner"],
+        "priority": 1
+    },
+    "Registry": {
+        "folder_id": "B. The Registry",
+        "keywords": ["registry", "register", "national"],
+        "priority": 2
+    },
+    "Puzzles": {
+        "folder_id": "C. 'uzzles",
+        "keywords": ["puzzle", "puzzles", "challenge", "scenario"],
+        "priority": 3
+    },
+    "Exam Prep": {
+        "folder_id": "D.   Exam 'rep",
+        "keywords": ["exam", "prep", "preparation", "curriculum", "variation"],
+        "priority": 4
+    },
+    "Publications": {
+        "folder_id": "E. 'ublications",
+        "keywords":  ["publication", "research", "paper", "article", "mash"],
+        "priority": 5
+    },
+    "SPUDS": {
+        "folder_id": "F.  SPUDS",
+        "keywords": ["spuds", "guide", "hymn", "trial"],
+        "priority": 6
+    },
+    "RANZCCP": {
+        "folder_id": "G. RANZCCP",
+        "keywords": ["ranzccp", "establishment"],
+        "priority": 7
+    },
+    "Minutes": {
+        "folder_id": "H. Minutes",
+        "keywords": ["minutes", "meeting", "nha", "vha", "waha"],
+        "priority": 8,
+        "subcategories": {
+            "NHA": {
+                "keywords":  ["nha", "national high able"],
+                "priority": 1
+            },
+            "VHA": {
+                "keywords": ["vha", "victorian high able"],
+                "priority": 2
+            },
+            "WAHA": {
+                "keywords": ["waha", "western"],
+                "priority": 3
+            }
+        }
+    },
+    "Rulings": {
+        "folder_id": "I. Other Rulings",
+        "keywords": ["ruling", "recommendation", "deck chair"],
+        "priority": 9
+    },
+    "History": {
+        "folder_id": "J. Extra History",
+        "keywords": ["history", "anecdote", "event", "botsquali", "sahasa", "game"],
+        "priority": 10
+    }
+}
+
+# Year patterns (for sorting - most recent first)
+YEAR_PRIORITY = {
+    "2025": 1,
+    "202BJ": 2,  # 2024
+    "2023": 3,
+    "2022": 4,
+    "2021": 5,
+    "2020": 6,
+    "2017": 7,
+    "2016": 8,
+    "2015": 9,
+    "2010": 10,
+    "pre-2015": 11,
+    "old": 12
+}
+
 # --- GOOGLE DRIVE SERVICE INITIALIZATION ---
 def initialize_drive_service():
     """
-    Initialize Google Drive service with detailed error logging and debugging.   
+    Initialize Google Drive service with detailed error logging and debugging.     
     
     Returns:
         googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails. 
@@ -105,7 +189,7 @@ def initialize_drive_service():
             scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly']
             logger.debug(f"Using scopes: {scopes}")
             
-            credentials = Credentials. from_service_account_info(
+            credentials = Credentials.  from_service_account_info(
                 cred_content,
                 scopes=scopes
             )
@@ -129,7 +213,7 @@ def initialize_drive_service():
                 logger.info("Credentials refreshed successfully")
             else:
                 logger.debug("Credentials are valid, no refresh needed")
-        except Exception as e: 
+        except Exception as e:
             logger.error(f"Failed to refresh credentials: {type(e).__name__} - {str(e)}")
             logger.debug("Continuing with unrefreshed credentials...")
         
@@ -147,7 +231,7 @@ def initialize_drive_service():
             logger.error(f"Google API error building Drive service: {str(e)}")
             return None
         except Exception as e:  
-            logger.error(f"Unexpected error building Drive service:    {type(e).__name__} - {str(e)}")
+            logger.error(f"Unexpected error building Drive service:      {type(e).__name__} - {str(e)}")
             return None
         
         # Step 6: Test the service
@@ -163,7 +247,7 @@ def initialize_drive_service():
             logger.debug(f"Test returned {len(results.get('files', []))} items")
             
         except HttpError as e:
-            logger. error(f"HTTP error testing Drive service: {e.resp. status} - {e.content}")
+            logger.error(f"HTTP error testing Drive service: {e. resp.status} - {e. content}")
             return None
         except Exception as e:
             logger.error(f"Error testing Drive service: {type(e).__name__} - {str(e)}")
@@ -184,9 +268,9 @@ def initialize_drive_service():
 st.sidebar.title("🦁 'Remcensus")
 st.sidebar.success("✅ Protocol Discovery Active")
 st.sidebar.markdown("---")
-use_gdrive = st.sidebar. checkbox("Include Google Drive metadata in search", value=False)
+use_gdrive = st.sidebar.  checkbox("Include Google Drive metadata in search", value=False)
 drive_id_input = st.sidebar.text_input("Google Drive ID to use:", value="10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9")
-gdrive_top_k = st. sidebar.number_input("Number of drive items to include (metadata only)", min_value=1, max_value=20, value=5, step=1)
+gdrive_top_k = st.  sidebar.number_input("Number of drive items to include (metadata only)", min_value=1, max_value=20, value=5, step=1)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🛠️ Developer Mode")
@@ -197,9 +281,9 @@ if 'init_done' not in st.session_state:
     try:
         logger.info("Initializing Pinecone and AI clients...")
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
-        st. session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
-        st.session_state.groq_client = Groq(api_key=st. secrets["GROQ_API_KEY"])
+        st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
+        st.session_state.google_client = google_genai. Client(api_key=st.secrets["GEMINI_KEY"])
+        st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
         logger.info("Pinecone and AI clients initialized successfully")
         
@@ -207,7 +291,7 @@ if 'init_done' not in st.session_state:
         logger.info("Initializing Google Drive service...")
         st.session_state.drive_service = initialize_drive_service()
         
-        if st.session_state.drive_service: 
+        if st.session_state.drive_service:
             logger.info("Drive service initialized successfully")
         else:
             logger.warning("Drive service initialization returned None - Drive features will be unavailable")
@@ -237,7 +321,7 @@ def enforce_rem_lexicon(text):
         (r"\b10\b", "IJ"), (r"\bten\b", "iku jo")
     ]
     for pattern, sub in num_map:
-        text = re.sub(pattern, sub, text, flags=re.IGNORECASE)
+        text = re.sub(pattern, sub, text, flags=re. IGNORECASE)
     return text
 
 # --- 3. UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
@@ -248,11 +332,11 @@ SYSTEM_PROMPT = (
     "Do not use stage directions like *pauses*, *scribbles*, etc.\n"
     "Keep responses concise and informational.\n\n"
     "1. Do not mention Tiers or classification labels in your response.\n"
-    "2. For simple identity queries, provide only an ontological definition.    Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.   DIDACTIC TEACHING:    Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:    'rink and learn.\n"
+    "2. For simple identity queries, provide only an ontological definition.      Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3.     DIDACTIC TEACHING:     Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4. MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:     'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
-    "5. Format:    Direct answers only. No narrative, actions, or roleplay."
+    "5. Format:     Direct answers only. No narrative, actions, or roleplay."
 )
 
 # --- 4. TRIPLE-ENGINE HANDLER ---
@@ -260,17 +344,17 @@ def generate_response(context, query):
     debug_logs = []
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
-            messages=[{"role": "system", "content":   SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+            messages=[{"role": "system", "content":    SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
             model="llama-3.3-70b-versatile",
         )
-        return chat_completion.choices[0]. message.content, "Groq (Llama 3.3)", debug_logs
+        return chat_completion.choices[0].  message.content, "Groq (Llama 3.3)", debug_logs
     except Exception as e:
-        debug_logs.append(f"Groq:   {str(e)}")
+        debug_logs.append(f"Groq:    {str(e)}")
         try:
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=f"Context: {context}\n\nQuestion: {query}",
-                config={'system_instruction':   SYSTEM_PROMPT}
+                config={'system_instruction':    SYSTEM_PROMPT}
             )
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
@@ -278,30 +362,75 @@ def generate_response(context, query):
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
-                    messages=[{"role":   "system", "content":  SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+                    messages=[{"role":    "system", "content":   SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=800
                 )
-                return response.choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
+                return response. choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
             except Exception as e_hf:
                 debug_logs.append(f"HF:  {str(e_hf)}")
-                return "⚠️ SYSTEM FAILURE:  All protocols failed.", "OFFLINE", debug_logs
+                return "⚠️ SYSTEM FAILURE:   All protocols failed.", "OFFLINE", debug_logs
 
-# --- 5. GOOGLE DRIVE METADATA HELPER ---
+# --- 5. FOLDER STRUCTURE INTELLIGENCE ---
+def match_category(query_lower, folder_map):
+    """
+    Intelligently match query to folder categories.
+    Returns tuple:  (category_name, subcategory_name or None, confidence_score)
+    """
+    best_match = (None, None, 0)
+    
+    for category, info in folder_map.items():
+        category_keywords = info.get("keywords", [])
+        
+        # Check for main category match
+        for keyword in category_keywords:
+            if keyword in query_lower: 
+                confidence = len(keyword) / len(query_lower)  # Longer matches = higher confidence
+                if confidence > best_match[2]:
+                    best_match = (category, None, confidence)
+        
+        # Check for subcategories
+        if "subcategories" in info: 
+            for subcat_name, subcat_info in info["subcategories"].items():
+                subcat_keywords = subcat_info.get("keywords", [])
+                for keyword in subcat_keywords: 
+                    if keyword in query_lower:
+                        confidence = len(keyword) / len(query_lower)
+                        if confidence > best_match[2]:
+                            best_match = (category, subcat_name, confidence)
+    
+    return best_match
+
+def extract_year(folder_name):
+    """Extract year from folder name and return priority."""
+    folder_lower = folder_name.lower()
+    
+    for year_pattern, priority in YEAR_PRIORITY.items():
+        if year_pattern. lower() in folder_lower:
+            return priority
+    
+    return 999  # Unknown year gets lowest priority
+
+# --- 6. GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
-    Fetch metadata for the most recent files in a drive or folder (including subfolders).
-    Optionally filters by search query relevance.
-    Returns a list of dicts with selected metadata fields.
+    Fetch metadata with intelligent folder structure awareness.
+    Uses RACRL_FOLDER_MAP to understand hierarchy and prioritize results.
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.      Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.            Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
-        logger.info(f"Fetching recent files from drive/folder {drive_id} (including subfolders)...")
+        logger.info(f"Fetching recent files from drive/folder {drive_id} with intelligent folder structure...")
         
-        all_files = []
+        # Detect category intent from query
+        category_match, subcategory_match, category_confidence = None, None, 0
+        if search_query:
+            category_match, subcategory_match, category_confidence = match_category(search_query. lower(), RACRL_FOLDER_MAP)
+            logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:. 2f}")
+        
+        all_items = []
         folders_to_search = [drive_id]
         searched_folders = set()
         
@@ -316,7 +445,6 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             logger.debug(f"Searching folder: {current_folder}")
             
             try:
-                # Query files in current folder
                 query = f"'{current_folder}' in parents and trashed=false"
                 resp = drive_service.files().list(
                     q=query,
@@ -328,91 +456,109 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 items = resp.get("files", [])
                 logger.debug(f"Found {len(items)} items in folder {current_folder}")
                 
-                for item in items: 
-                    if item['mimeType'] == 'application/vnd.google-apps. folder':
-                        # Add folder to search queue
+                for item in items:
+                    is_folder = item['mimeType'] == 'application/vnd.google-apps.  folder'
+                    
+                    if is_folder:
                         folders_to_search.append(item['id'])
                         logger. debug(f"Added subfolder to search queue: {item['name']}")
                     else:
-                        # Add file to results
-                        all_files.append(item)
+                        all_items.append(item)
+                        logger.debug(f"Added file to results: {item['name']}")
                         
             except HttpError as e:
                 logger. warning(f"Error searching folder {current_folder}: {e}")
                 continue
         
-        logger.info(f"Successfully fetched {len(all_files)} files from folder/drive (including all subfolders)")
+        logger.info(f"Successfully fetched {len(all_items)} files from folder/drive")
         
         # Sort by modified time descending
-        all_files.sort(key=lambda x: x. get('modifiedTime', ''), reverse=True)
+        all_items.sort(key=lambda x: x. get('modifiedTime', ''), reverse=True)
         
-        # If search_query provided, score files by relevance
+        # Score and filter based on search query and folder structure
         if search_query:
-            search_terms = [term for term in search_query.lower().split() if len(term) > 2]  # Filter out short words
-            scored_files = []
+            search_terms = [term for term in search_query.lower().split() if len(term) > 2]
+            scored_items = []
             
-            for f in all_files:
-                # Score based on filename and description matches
-                name_lower = f. get('name', '').lower()
-                desc_lower = f.get('description', '').lower() if f.get('description') else ''
+            for item in all_items: 
+                name_lower = item. get('name', '').lower()
+                desc_lower = item.get('description', '').lower() if item.get('description') else ''
                 score = 0
                 
+                # Base scoring on filename/description
                 for term in search_terms:
                     if term in name_lower: 
-                        score += 3  # Higher weight for name matches
+                        score += 3
                     if term in desc_lower:
                         score += 1
                 
-                # Include all files, but prioritize scored ones
-                scored_files.append((score, f))
-                logger.debug(f"File:    {f. get('name')} - Score: {score}")
+                # Boost score if item matches detected category
+                if category_match: 
+                    # Check if item is in a category-related folder
+                    category_info = RACRL_FOLDER_MAP.get(category_match, {})
+                    if any(kw in name_lower for kw in category_info.get("keywords", [])):
+                        score += 5
+                    
+                    # Extra boost for subcategory match
+                    if subcategory_match and "subcategories" in category_info:
+                        subcat_info = category_info["subcategories"].get(subcategory_match, {})
+                        if any(kw in name_lower for kw in subcat_info.get("keywords", [])):
+                            score += 5
+                
+                # Boost recent years
+                year_priority = extract_year(item.get('name', ''))
+                score += (100 - year_priority)  # More recent = higher boost
+                
+                scored_items. append((score, item))
+                logger.debug(f"File:   {item. get('name')} - Score: {score}")
             
             # Sort by score (descending) then by modified time
-            scored_files.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
-            files = [f for _, f in scored_files[:  top_k]]
-            logger.info(f"Sorted {len(files)} files by relevance based on search query")
+            scored_items.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
+            items = [item for _, item in scored_items[:top_k]]
+            logger.info(f"Top {len(items)} files after intelligent scoring")
         else:
-            files = all_files[:top_k]
+            items = all_items[:top_k]
+            logger.debug(f"Returning top {len(items)} most recent items (no search query)")
         
-        # Normalize datetime strings into ISO format for display
-        for f in files:
-            if "createdTime" in f: 
+        # Normalize datetime strings
+        for item in items: 
+            if "createdTime" in item:
                 try:
-                    dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
-                    f["createdTimeISO"] = dt.isoformat()
+                    dt = datetime.fromisoformat(item["createdTime"].replace("Z", "+00:00"))
+                    item["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger. warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
-                    f["createdTimeISO"] = f. get("createdTime")
+                    logger.warning(f"Failed to parse datetime {item['createdTime']}: {dt_e}")
+                    item["createdTimeISO"] = item. get("createdTime")
             
-            if "modifiedTime" in f:
+            if "modifiedTime" in item:
                 try:
-                    dt = datetime.fromisoformat(f["modifiedTime"]. replace("Z", "+00:00"))
-                    f["modifiedTimeISO"] = dt.isoformat()
+                    dt = datetime.fromisoformat(item["modifiedTime"]. replace("Z", "+00:00"))
+                    item["modifiedTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger.warning(f"Failed to parse datetime {f['modifiedTime']}: {dt_e}")
-                    f["modifiedTimeISO"] = f.get("modifiedTime")
+                    logger.warning(f"Failed to parse datetime {item['modifiedTime']}: {dt_e}")
+                    item["modifiedTimeISO"] = item.get("modifiedTime")
         
-        return files
+        return items
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive files: {e.resp. status} - {e.content}")
+        logger. error(f"HTTP error fetching drive items: {e. resp.status} - {e. content}")
         raise
     except GoogleAPICallError as e:
-        logger.error(f"Google API error fetching drive files: {str(e)}")
+        logger.error(f"Google API error fetching drive items: {str(e)}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error fetching drive files: {type(e).__name__} - {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}", exc_info=True)
         raise
 
-# --- 6. MAIN INTERFACE ---
+# --- 7. MAIN INTERFACE ---
 query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
 
 if query:
     with st.spinner("🌀 Triage in progress..."):
         try:
-            logger.info(f"Processing query: {query[:   100]}...")
+            logger.info(f"Processing query: {query[:     100]}...")
             
-            # Shortcut:    if user specifically asks for the most recent file in the drive
+            # Shortcut:     if user specifically asks for the most recent file in the drive
             q_lower = query.lower()
             wants_most_recent = False
             if use_gdrive and ("most recent" in q_lower or "latest file" in q_lower or "newest file" in q_lower):
@@ -421,7 +567,7 @@ if query:
 
             # Run embedding + pinecone retrieval as before
             result = st.session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
-            search_results = st.session_state.pc_index.query(vector=result. embeddings[0]. values, top_k=5, include_metadata=True)
+            search_results = st.session_state.pc_index.query(vector=result.embeddings[0]. values, top_k=5, include_metadata=True)
             context_text = ""
             for match in search_results['matches']:
                 meta = match['metadata']
@@ -450,19 +596,19 @@ if query:
                                 mime = most_recent.get("mimeType", "unknown")
                                 
                                 logger.info(f"Displaying most recent file: {name}")
-                                st.success("Most recent file in the Drive (by created time):")
-                                st.write(f"- Name: **{name}**")
+                                st.success("Most recent file in the Drive (by relevance & recency):")
+                                st. write(f"- Name: **{name}**")
                                 st.write(f"- Created: {created}")
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
                             
                             # Append drive metadata into context so LLMs can reference it
-                            context_text += "\n---\nGoogleDrive Metadata (most recent items):\n"
+                            context_text += "\n---\nGoogleDrive Metadata (most relevant items):\n"
                             for f in drive_files:
-                                owners = ", ".join([o.get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
-                                context_text += f"Name: {f.get('name')}\nCreated: {f. get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime:  {f.get('mimeType')}\n\n"
+                                owners = ", ".join([o. get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
+                                context_text += f"Name: {f. get('name')}\nCreated: {f.get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
                                 logger.debug(f"Added to context: {f.get('name')}")
-                        else: 
+                        else:
                             st.info("No files returned from the specified Drive (or insufficient permissions).")
                             logger.warning(f"No files returned from drive {drive_id_input}")
                         
@@ -473,9 +619,9 @@ if query:
                     st.error(error_msg)
                     
                     # Developer mode error report
-                    if dev_mode: 
+                    if dev_mode:
                         with st.expander("🔴 DEVELOPER ERROR REPORT"):
-                            st. markdown("### Error Details")
+                            st.markdown("### Error Details")
                             st.write(f"**Error Type:** `{type(e_drive).__name__}`")
                             st.write(f"**Error Message:** {str(e_drive)}")
                             st.write(f"**Drive ID:** `{drive_id_input}`")
@@ -498,7 +644,7 @@ if query:
                     for log in logs:
                         st.code(log)
             
-            logger.info(f"Query processing completed. Engine:    {engine_used}")
+            logger.info(f"Query processing completed. Engine:     {engine_used}")
             
         except Exception as e:
             logger.error(f"Critical error processing query: {type(e).__name__} - {str(e)}", exc_info=True)
@@ -508,7 +654,7 @@ if query:
             
             # Developer mode error report
             if dev_mode:
-                with st. expander("🔴 DEVELOPER ERROR REPORT"):
+                with st.expander("🔴 DEVELOPER ERROR REPORT"):
                     st.markdown("### Critical Error Details")
                     st.write(f"**Error Type:** `{type(e).__name__}`")
                     st.write(f"**Error Message:** {str(e)}")
@@ -521,7 +667,7 @@ if query:
                     st.write(f"**Drive Service Initialized:** {st.session_state.drive_service is not None}")
                     st.write(f"**Pinecone Index Ready:** {hasattr(st.session_state, 'pc_index')}")
                     st.write(f"**Google Client Ready:** {hasattr(st.session_state, 'google_client')}")
-                    st.write(f"**Groq Client Ready:** {hasattr(st.session_state, 'groq_client')}")
+                    st.write(f"**Groq Client Ready:** {hasattr(st. session_state, 'groq_client')}")
                     st.write(f"**HuggingFace Client Ready:** {hasattr(st.session_state, 'hf_client')}")
                     
                     # Show stack trace
