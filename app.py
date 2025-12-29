@@ -512,7 +512,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 search_query.lower(), RACRL_FOLDER_MAP
             )
             logger.info(
-                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:. 2f}"
+                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}"
             )
 
         all_items = []
