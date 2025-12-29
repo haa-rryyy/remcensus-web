@@ -5,3 +5,5 @@ pinecone>=6.0.0
 huggingface_hub
 google-api-python-client
 google-auth
+PyPDF2==3.0.1
+python-docx==0.8.11
