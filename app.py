@@ -284,70 +284,68 @@ def generate_response(context, query):
 # --- 5. GOOGLE DRIVE METADATA HELPER ---
 def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
-    Fetch metadata for the most recent files in a drive or folder.
+    Fetch metadata for the most recent files in a drive or folder (including subfolders).
     Optionally filters by search query relevance.
     Returns a list of dicts with selected metadata fields.
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.  Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
+        raise RuntimeError("Drive service not initialized.    Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets.")
     
     try:
-        logger.info(f"Fetching recent files from drive/folder {drive_id}...")
+        logger.info(f"Fetching recent files from drive/folder {drive_id} (including subfolders)...")
         
-        # Build query to exclude folders if search_query is provided
-        query = f"'{drive_id}' in parents and trashed=false"
-        if search_query:
-            # Exclude folders when doing a specific search
-            query += " and mimeType != 'application/vnd.google-apps.folder'"
-            logger.debug(f"Filtering out folders for search query: {search_query}")
+        # Build query to search recursively in folder and exclude folders from results
+        query = f"('{drive_id}' in parents or '{drive_id}' in ancestors) and trashed=false and mimeType != 'application/vnd.google-apps.folder'"
+        logger.debug(f"Search query: {query}")
         
-        # Query files within the folder/drive
+        # Query files within the folder/drive AND all subfolders
         resp = drive_service.files().list(
             q=query,
             spaces='drive',
             orderBy="modifiedTime desc",
-            pageSize=top_k * 3,  # Fetch more to filter by relevance
+            pageSize=top_k * 5,  # Fetch more to filter by relevance
             fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)"
         ).execute()
         
         files = resp.get("files", [])
-        logger.info(f"Successfully fetched {len(files)} files from folder/drive")
+        logger.info(f"Successfully fetched {len(files)} files from folder/drive (including subfolders)")
         
         # If search_query provided, score files by relevance
         if search_query:
-            search_terms = search_query.lower().split()
+            search_terms = [term for term in search_query.lower().split() if len(term) > 2]  # Filter out short words
             scored_files = []
             
             for f in files:
                 # Score based on filename and description matches
                 name_lower = f. get('name', '').lower()
-                desc_lower = f.get('description', '').lower()
+                desc_lower = f.get('description', '').lower() if f.get('description') else ''
                 score = 0
                 
                 for term in search_terms:
-                    if term in name_lower:  
+                    if term in name_lower:   
                         score += 3  # Higher weight for name matches
                     if term in desc_lower:
                         score += 1
                 
-                if score > 0:
-                    scored_files. append((score, f))
+                # Include all files, but prioritize scored ones
+                scored_files.append((score, f))
+                logger.debug(f"File: {f. get('name')} - Score: {score}")
             
             # Sort by score (descending) then by modified time
             scored_files.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
-            files = [f for _, f in scored_files[:top_k]]
-            logger.info(f"Filtered to {len(files)} relevant files based on search query")
+            files = [f for _, f in scored_files[: top_k]]
+            logger. info(f"Sorted {len(files)} files by relevance based on search query")
         
         # Normalize datetime strings into ISO format for display
-        for f in files: 
+        for f in files:  
             if "createdTime" in f:  
                 try:
-                    dt = datetime.fromisoformat(f["createdTime"].replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(f["createdTime"]. replace("Z", "+00:00"))
                     f["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger. warning(f"Failed to parse datetime {f['createdTime']}: {dt_e}")
+                    logger.  warning(f"Failed to parse datetime {f['createdTime']}:  {dt_e}")
                     f["createdTimeISO"] = f. get("createdTime")
             
             if "modifiedTime" in f:
@@ -361,10 +359,10 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         return files
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive files: {e.resp.status} - {e.content}")
+        logger.  error(f"HTTP error fetching drive files: {e. resp.  status} - {e.content}")
         raise
     except GoogleAPICallError as e:
-        logger.error(f"Google API error fetching drive files: {str(e)}")
+        logger. error(f"Google API error fetching drive files: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Unexpected error fetching drive files: {type(e).__name__} - {str(e)}", exc_info=True)
