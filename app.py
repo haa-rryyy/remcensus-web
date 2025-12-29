@@ -557,6 +557,13 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             f"Search complete:  Found {len(all_items)} files across {len(searched_folders)} folders"
         )
 
+        # Display debug info in Streamlit UI
+        st.write(f"📊 **Folders searched:** {len(searched_folders)}")
+        st.write(f"📁 **Total files found:** {len(all_items)}")
+        st.write("**File names found:**")
+        for file_item in all_items:
+            st.write(f"  - {file_item.get('name')}")
+
         if len(all_items) == 0:
             logger.warning("No files found in the entire folder hierarchy!")
 
