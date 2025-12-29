@@ -567,7 +567,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         if len(all_items) == 0:
             logger.warning("No files found in the entire folder hierarchy!")
 
-        all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+        all_items.sort(key=lambda x: x.get("modifiedTime", ""))
 
         # NOW DETECT CATEGORY (after all_items exists)
         category_match, subcategory_match, category_confidence = None, None, 0
