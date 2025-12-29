@@ -415,6 +415,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
     """
     Fetch metadata with intelligent folder structure awareness.
     Uses RACRL_FOLDER_MAP to understand hierarchy and prioritize results.
+    Returns ONLY files, not folders (unless explicitly requested).
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
@@ -426,74 +427,83 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         
         # Detect category intent from query
         category_match, subcategory_match, category_confidence = None, None, 0
-        if search_query:
+        if search_query: 
             category_match, subcategory_match, category_confidence = match_category(search_query. lower(), RACRL_FOLDER_MAP)
-            logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}")
+            logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:. 2f}")
         
         all_items = []
         folders_to_search = [drive_id]
         searched_folders = set()
         
-        # Recursively search through folders
+        # Recursively search through ALL folders to find files
+        logger.info("Starting recursive folder traversal...")
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
             
-            if current_folder in searched_folders: 
+            if current_folder in searched_folders:  
                 continue
             
             searched_folders.add(current_folder)
             logger.debug(f"Searching folder: {current_folder}")
             
             try:
-                query = f"'{current_folder}' in parents and trashed=false"
+                query_string = f"'{current_folder}' in parents and trashed=false"
                 resp = drive_service.files().list(
-                    q=query,
+                    q=query_string,
                     spaces='drive',
                     pageSize=100,
                     fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)"
                 ).execute()
                 
                 items = resp.get("files", [])
-                logger.debug(f"Found {len(items)} items in folder {current_folder}")
+                logger. debug(f"Found {len(items)} items in folder {current_folder}")
                 
                 for item in items:
                     is_folder = item['mimeType'] == 'application/vnd.google-apps. folder'
                     
                     if is_folder:
+                        # Always queue folders for searching, even if we're looking for files
                         folders_to_search.append(item['id'])
                         logger.debug(f"Added subfolder to search queue: {item['name']}")
                     else:
+                        # Add files to results
                         all_items.append(item)
-                        logger.debug(f"Added file to results: {item['name']}")
+                        logger. debug(f"Added file to results: {item['name']}")
                         
             except HttpError as e:
                 logger. warning(f"Error searching folder {current_folder}: {e}")
                 continue
         
-        logger.info(f"Successfully fetched {len(all_items)} files from folder/drive")
+        logger.info(f"Successfully fetched {len(all_items)} files from folder/drive (searched {len(searched_folders)} folders)")
+        logger.debug(f"Files found: {[item. get('name') for item in all_items]}")
+        
+        if len(all_items) == 0:
+            logger.warning("No files found in the entire folder hierarchy!")
         
         # Sort by modified time descending
-        all_items.sort(key=lambda x: x. get('modifiedTime', ''), reverse=True)
+        all_items.sort(key=lambda x: x.get('modifiedTime', ''), reverse=True)
         
         # Score and filter based on search query and folder structure
         if search_query:
             search_terms = [term for term in search_query.lower().split() if len(term) > 2]
             scored_items = []
             
-            for item in all_items: 
-                name_lower = item. get('name', '').lower()
+            logger.info(f"Scoring {len(all_items)} files against search terms: {search_terms}")
+            
+            for item in all_items:  
+                name_lower = item.get('name', '').lower()
                 desc_lower = item.get('description', '').lower() if item.get('description') else ''
                 score = 0
                 
                 # Base scoring on filename/description
                 for term in search_terms:
-                    if term in name_lower: 
+                    if term in name_lower:  
                         score += 3
                     if term in desc_lower:
                         score += 1
                 
                 # Boost score if item matches detected category
-                if category_match: 
+                if category_match:  
                     category_info = RACRL_FOLDER_MAP.get(category_match, {})
                     if any(kw in name_lower for kw in category_info.get("keywords", [])):
                         score += 5
@@ -509,18 +519,20 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 score += (100 - year_priority)
                 
                 scored_items. append((score, item))
-                logger.debug(f"File:  {item. get('name')} - Score: {score}")
+                if score > 0:
+                    logger.debug(f"File:  {item. get('name')} - Score: {score}")
             
             # Sort by score (descending) then by modified time
             scored_items.sort(key=lambda x: (-x[0], x[1].get('modifiedTime', '')), reverse=True)
             items = [item for _, item in scored_items[:top_k]]
             logger.info(f"Top {len(items)} files after intelligent scoring")
+            logger.debug(f"Top files: {[f. get('name') for f in items]}")
         else:
             items = all_items[:top_k]
             logger.debug(f"Returning top {len(items)} most recent items (no search query)")
         
         # Normalize datetime strings
-        for item in items: 
+        for item in items:
             if "createdTime" in item:
                 try:
                     dt = datetime.fromisoformat(item["createdTime"].replace("Z", "+00:00"))
@@ -540,10 +552,10 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         return items
         
     except HttpError as e:
-        logger. error(f"HTTP error fetching drive items: {e.resp.status} - {e.content}")
+        logger. error(f"HTTP error fetching drive items: {e. resp. status} - {e.content}")
         raise
     except GoogleAPICallError as e:
-        logger.error(f"Google API error fetching drive items: {str(e)}")
+        logger. error(f"Google API error fetching drive items: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}", exc_info=True)
