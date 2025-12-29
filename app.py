@@ -555,37 +555,83 @@ query = st.text_input("Enter Query Parameters:", placeholder="Search the archive
 
 if query:
     with st.spinner("🌀 Triage in progress..."):
+        # Initialize search process tracking
+        search_process = {
+            "query": query,
+            "timestamp": datetime.now().isoformat(),
+            "use_gdrive": use_gdrive,
+            "drive_id":  drive_id_input,
+            "gdrive_top_k": gdrive_top_k,
+            "category_detection": None,
+            "pinecone_results": [],
+            "drive_results": [],
+            "context_sources": [],
+            "llm_engine_used": None,
+            "errors": []
+        }
+        
         try:
-            logger.info(f"Processing query: {query[:     100]}...")
+            logger.info(f"Processing query: {query[:      100]}...")
             
-            # Shortcut:     if user specifically asks for the most recent file in the drive
+            # Shortcut:      if user specifically asks for the most recent file in the drive
             q_lower = query.lower()
             wants_most_recent = False
             if use_gdrive and ("most recent" in q_lower or "latest file" in q_lower or "newest file" in q_lower):
                 wants_most_recent = True
                 logger.debug("User query detected as requesting most recent file")
+                search_process["wants_most_recent"] = True
 
             # Run embedding + pinecone retrieval as before
+            logger.info("Step 1: Running Pinecone embedding and retrieval...")
             result = st.session_state.google_client.models.embed_content(model="text-embedding-004", contents=query)
-            search_results = st.session_state.pc_index.query(vector=result.embeddings[0]. values, top_k=5, include_metadata=True)
+            search_results = st.session_state.pc_index.query(vector=result.embeddings[0].  values, top_k=5, include_metadata=True)
             context_text = ""
+            
             for match in search_results['matches']:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
+                search_process["pinecone_results"].append({
+                    "source": meta.get('source', 'Unknown'),
+                    "score": match. get('score', 'N/A'),
+                    "content_preview": meta.get('text', '')[: 100] + "..."
+                })
+            
+            logger.info(f"Pinecone returned {len(search_results['matches'])} results")
 
             # If Drive metadata inclusion is enabled, fetch and append metadata to context_text
-            if use_gdrive: 
+            if use_gdrive:  
                 try:
-                    logger.info("Fetching Google Drive metadata...")
+                    logger.info("Step 2: Fetching Google Drive metadata...")
                     # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
                     if st.session_state.drive_service is None:
-                        logger.warning("Drive service is None - skipping Drive metadata")
+                        logger. warning("Drive service is None - skipping Drive metadata")
                         st.warning("⚠️ Drive service not initialized. Drive metadata unavailable.")
+                        search_process["errors"].append("Drive service not initialized")
                     else:
+                        logger.info("Step 2a: Detecting category intent from query...")
+                        category_match, subcategory_match, category_confidence = match_category(query. lower(), RACRL_FOLDER_MAP)
+                        search_process["category_detection"] = {
+                            "category": category_match,
+                            "subcategory": subcategory_match,
+                            "confidence": category_confidence
+                        }
+                        logger.info(f"Category detected: {category_match} > {subcategory_match} (confidence: {category_confidence:. 2f})")
+                        
+                        logger.info("Step 2b: Recursively searching Drive folders...")
                         drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k, search_query=query)
                         
-                        if drive_files: 
-                            logger.info(f"Retrieved {len(drive_files)} files from Drive")
+                        if drive_files:  
+                            logger.info(f"Step 2c: Retrieved {len(drive_files)} files from Drive")
+                            
+                            for idx, f in enumerate(drive_files):
+                                search_process["drive_results"].append({
+                                    "rank": idx + 1,
+                                    "name": f.get('name'),
+                                    "mime_type": f.get('mimeType'),
+                                    "created": f.get('createdTimeISO'),
+                                    "modified": f.get('modifiedTimeISO'),
+                                    "link": f.get('webViewLink')
+                                })
                             
                             # If the user directly asked for the most recent file, show it immediately
                             if wants_most_recent:
@@ -597,44 +643,47 @@ if query:
                                 
                                 logger.info(f"Displaying most recent file: {name}")
                                 st.success("Most recent file in the Drive (by relevance & recency):")
-                                st. write(f"- Name: **{name}**")
-                                st.write(f"- Created: {created}")
+                                st.  write(f"- Name: **{name}**")
+                                st. write(f"- Created: {created}")
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
                             
                             # Append drive metadata into context so LLMs can reference it
                             context_text += "\n---\nGoogleDrive Metadata (most relevant items):\n"
                             for f in drive_files:
-                                owners = ", ".join([o. get("displayName", o.get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
-                                context_text += f"Name: {f. get('name')}\nCreated: {f.get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
+                                owners = ", ".join([o.  get("displayName", o. get("emailAddress", "unknown")) for o in f.get("owners", [])]) if f.get("owners") else "unknown"
+                                context_text += f"Name: {f.  get('name')}\nCreated: {f.get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink','')}\nMime: {f.get('mimeType')}\n\n"
                                 logger.debug(f"Added to context: {f.get('name')}")
                         else:
                             st.info("No files returned from the specified Drive (or insufficient permissions).")
                             logger.warning(f"No files returned from drive {drive_id_input}")
+                            search_process["errors"].append("No files returned from Drive")
                         
                 except Exception as e_drive:
                     logger.error(f"Google Drive metadata fetch failed: {type(e_drive).__name__} - {str(e_drive)}", exc_info=True)
+                    search_process["errors"].append(f"Drive fetch error: {type(e_drive).__name__} - {str(e_drive)}")
                     
                     error_msg = f"❌ Google Drive metadata fetch failed: {str(e_drive)}"
                     st.error(error_msg)
                     
                     # Developer mode error report
                     if dev_mode:
-                        with st.expander("🔴 DEVELOPER ERROR REPORT"):
+                        with st.expander("🔴 DEVELOPER ERROR REPORT - DRIVE FETCH"):
                             st.markdown("### Error Details")
                             st.write(f"**Error Type:** `{type(e_drive).__name__}`")
                             st.write(f"**Error Message:** {str(e_drive)}")
                             st.write(f"**Drive ID:** `{drive_id_input}`")
                             st.write(f"**Query:** `{query}`")
                             st.write(f"**Search Query Enabled:** {use_gdrive}")
-                            st.write(f"**Top-K:** {gdrive_top_k}")
+                            st. write(f"**Top-K:** {gdrive_top_k}")
                             
                             # Show stack trace
-                            st.markdown("### Stack Trace")
+                            st. markdown("### Stack Trace")
                             st.code(traceback.format_exc())
 
-            logger.info("Generating response from LLM...")
+            logger.info("Step 3: Generating response from LLM...")
             raw_text, engine_used, logs = generate_response(context_text, query)
+            search_process["llm_engine_used"] = engine_used
             final_answer = enforce_rem_lexicon(raw_text)
             st.caption(f"Generated via: {engine_used}")
             st.info(final_answer)
@@ -644,21 +693,95 @@ if query:
                     for log in logs:
                         st.code(log)
             
-            logger.info(f"Query processing completed. Engine:     {engine_used}")
+            logger.info(f"Step 4: Query processing completed. Engine:     {engine_used}")
+            
+            # Always show developer mode search process details
+            if dev_mode: 
+                with st.expander("🔍 DEVELOPER MODE - SEARCH PROCESS ANALYSIS"):
+                    st.markdown("### Search Process Timeline")
+                    
+                    # Query information
+                    st.markdown("#### 1️⃣ Query Information")
+                    col1, col2 = st. columns(2)
+                    with col1:
+                        st. write(f"**Query:** `{search_process['query']}`")
+                        st.write(f"**Timestamp:** {search_process['timestamp']}")
+                    with col2:
+                        st.write(f"**Drive Search Enabled:** {search_process['use_gdrive']}")
+                        st.write(f"**Drive ID:** `{search_process['drive_id']}`")
+                    
+                    # Category detection
+                    if search_process['category_detection']: 
+                        st.markdown("#### 2️⃣ Category Detection")
+                        cat_det = search_process['category_detection']
+                        st.write(f"**Primary Category:** {cat_det['category']}")
+                        st.write(f"**Subcategory:** {cat_det['subcategory'] or 'None'}")
+                        st.write(f"**Detection Confidence:** {cat_det['confidence']:.2%}")
+                    
+                    # Pinecone results
+                    if search_process['pinecone_results']:
+                        st.markdown("#### 3️⃣ Pinecone Vector Search Results")
+                        for idx, result in enumerate(search_process['pinecone_results'], 1):
+                            with st.container():
+                                st.write(f"**Result {idx}**")
+                                col1, col2 = st. columns([3, 1])
+                                with col1:
+                                    st.write(f"Source: `{result['source']}`")
+                                    st.write(f"Preview: {result['content_preview']}")
+                                with col2:
+                                    st.write(f"Score: {result['score']}")
+                    
+                    # Drive results
+                    if search_process['drive_results']:
+                        st.markdown("#### 4️⃣ Google Drive Search Results (Ranked by Algorithm)")
+                        for result in search_process['drive_results']:
+                            with st.container():
+                                st.write(f"**#{result['rank']}** - {result['name']}")
+                                col1, col2 = st. columns(2)
+                                with col1:
+                                    st.write(f"Type: `{result['mime_type']}`")
+                                    st.write(f"Created: {result['created']}")
+                                with col2:
+                                    st. write(f"Modified: {result['modified']}")
+                                st.write(f"Link: {result['link']}")
+                    
+                    # LLM Engine
+                    st.markdown("#### 5️⃣ LLM Processing")
+                    st.write(f"**Engine Used:** {search_process['llm_engine_used']}")
+                    st.write(f"**Context Sources Combined:** {len(search_process['pinecone_results']) + len(search_process['drive_results'])} sources")
+                    
+                    # Errors (if any)
+                    if search_process['errors']:
+                        st.markdown("#### ⚠️ Errors Encountered")
+                        for error in search_process['errors']:
+                            st.error(error)
+                    else:
+                        st.success("✅ No errors encountered during search process")
+                    
+                    # Export button for debugging
+                    st.markdown("#### 📊 Export Search Data")
+                    search_json = json.dumps(search_process, indent=2)
+                    st.download_button(
+                        label="📥 Download Search Process JSON",
+                        data=search_json,
+                        file_name=f"search_process_{datetime. now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json"
+                    )
             
         except Exception as e:
             logger.error(f"Critical error processing query: {type(e).__name__} - {str(e)}", exc_info=True)
+            search_process["errors"].append(f"Critical error: {type(e).__name__} - {str(e)}")
             
             error_msg = f"⚠️ Critical Error: {e}"
-            st.error(error_msg)
+            st. error(error_msg)
             
             # Developer mode error report
             if dev_mode:
-                with st.expander("🔴 DEVELOPER ERROR REPORT"):
-                    st.markdown("### Critical Error Details")
+                with st.expander("🔴 DEVELOPER ERROR REPORT - CRITICAL"):
+                    st. markdown("### Critical Error Details")
                     st.write(f"**Error Type:** `{type(e).__name__}`")
                     st.write(f"**Error Message:** {str(e)}")
-                    st. write(f"**Query:** `{query}`")
+                    st.  write(f"**Query:** `{query}`")
                     st.write(f"**Drive Metadata Enabled:** {use_gdrive}")
                     st.write(f"**Drive ID:** `{drive_id_input}`")
                     
@@ -666,12 +789,16 @@ if query:
                     st.markdown("### Session State")
                     st.write(f"**Drive Service Initialized:** {st.session_state.drive_service is not None}")
                     st.write(f"**Pinecone Index Ready:** {hasattr(st.session_state, 'pc_index')}")
-                    st.write(f"**Google Client Ready:** {hasattr(st.session_state, 'google_client')}")
-                    st.write(f"**Groq Client Ready:** {hasattr(st. session_state, 'groq_client')}")
+                    st.write(f"**Google Client Ready:** {hasattr(st. session_state, 'google_client')}")
+                    st. write(f"**Groq Client Ready:** {hasattr(st. session_state, 'groq_client')}")
                     st.write(f"**HuggingFace Client Ready:** {hasattr(st.session_state, 'hf_client')}")
                     
                     # Show stack trace
-                    st.markdown("### Stack Trace")
+                    st. markdown("### Stack Trace")
                     st.code(traceback.format_exc())
+                    
+                    # Show search process so far
+                    st.markdown("### Search Process Before Error")
+                    st.json(search_process)
 
 logger.info("Application render completed")
