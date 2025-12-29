@@ -646,6 +646,12 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             )
             items = [item for _, item in scored_items[:top_k]]
             logger.info(f"Top {len(items)} files after intelligent scoring")
+
+            # Display the debug logs in Streamlit
+            st.write("### 🔧 SCORING DEBUG LOGS")
+            with open("drive_service_debug.log", "r") as f:
+                log_content = f.read()
+                st.text_area("Debug Log Output", log_content, height=400)
         else:
             items = all_items[:top_k]
             logger.debug(
