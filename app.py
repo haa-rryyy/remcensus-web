@@ -10,6 +10,7 @@ import logging
 import sys
 import os
 import traceback
+import io
 
 # Google Drive API imports
 from google.auth.transport.requests import Request
@@ -17,6 +18,8 @@ from google.oauth2.service_account import Credentials
 from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
+import PyPDF2
 
 # Configure logging with detailed formatting
 logging.basicConfig(
@@ -194,7 +197,10 @@ def initialize_drive_service():
         # Step 3: Create service account credentials
         logger.info("Creating service account credentials...")
         try:
-            scopes = ["https://www.googleapis.com/auth/drive.metadata.readonly"]
+            scopes = [
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+                "https://www.googleapis.com/auth/drive.readonly",
+            ]
             logger.debug(f"Using scopes: {scopes}")
 
             credentials = Credentials.from_service_account_info(
@@ -286,6 +292,125 @@ def initialize_drive_service():
         return None
 
 
+# --- CONTENT EXTRACTION HELPER ---
+def extract_file_content(drive_service, file_id, mime_type, file_name):
+    """
+    Extract content from Google Drive files (Google Docs, PDFs, Google Sheets).
+    
+    Args:
+        drive_service:  Authenticated Drive service
+        file_id: ID of the file to extract from
+        mime_type: MIME type of the file
+        file_name: Name of the file
+    
+    Returns:
+        tuple: (content_text, success_bool, error_message)
+    """
+    try:
+        logger.info(f"Extracting content from:  {file_name} (MIME: {mime_type})")
+        
+        # Google Docs
+        if "vnd.google-apps.document" in mime_type:
+            logger.debug("Detected Google Docs format")
+            try:
+                # Export as plain text
+                request = drive_service.files().export(
+                    fileId=file_id, mimeType="text/plain"
+                )
+                content = request.execute().decode("utf-8")
+                logger.info(f"Successfully extracted Google Docs content ({len(content)} chars)")
+                return content, True, None
+            except Exception as e:
+                logger.error(f"Failed to extract Google Docs:  {str(e)}")
+                return "", False, f"Google Docs extraction failed: {str(e)}"
+        
+        # Google Sheets
+        elif "vnd.google-apps.spreadsheet" in mime_type:
+            logger.debug("Detected Google Sheets format")
+            try:
+                # Export as CSV
+                request = drive_service.files().export(
+                    fileId=file_id, mimeType="text/csv"
+                )
+                content = request.execute().decode("utf-8")
+                logger.info(f"Successfully extracted Google Sheets content ({len(content)} chars)")
+                return content, True, None
+            except Exception as e:
+                logger.error(f"Failed to extract Google Sheets: {str(e)}")
+                return "", False, f"Google Sheets extraction failed: {str(e)}"
+        
+        # PDF files
+        elif "application/pdf" in mime_type: 
+            logger.debug("Detected PDF format")
+            try:
+                # Download PDF to memory
+                request = drive_service.files().get_media(fileId=file_id)
+                file_stream = io.BytesIO()
+                downloader = MediaIoBaseDownload(file_stream, request)
+                done = False
+                
+                while not done:
+                    status, done = downloader.next_chunk()
+                    if status: 
+                        logger.debug(f"Download progress: {int(status.progress() * 100)}%")
+                
+                file_stream.seek(0)
+                
+                # Extract text from PDF
+                pdf_reader = PyPDF2.PdfReader(file_stream)
+                content = ""
+                for page_num, page in enumerate(pdf_reader.pages):
+                    try:
+                        page_content = page.extract_text()
+                        content += f"\n--- Page {page_num + 1} ---\n{page_content}"
+                    except Exception as e:
+                        logger.warning(f"Failed to extract page {page_num + 1}: {str(e)}")
+                        content += f"\n--- Page {page_num + 1} ---\n[Unable to extract text from this page]"
+                
+                logger.info(f"Successfully extracted PDF content ({len(content)} chars from {len(pdf_reader.pages)} pages)")
+                return content, True, None
+            except Exception as e:
+                logger.error(f"Failed to extract PDF: {str(e)}")
+                return "", False, f"PDF extraction failed: {str(e)}"
+        
+        # Microsoft Word (.docx)
+        elif "vnd.openxmlformats-officedocument.wordprocessingml.document" in mime_type:
+            logger.debug("Detected DOCX format")
+            try:
+                request = drive_service.files().get_media(fileId=file_id)
+                file_stream = io.BytesIO()
+                downloader = MediaIoBaseDownload(file_stream, request)
+                done = False
+                
+                while not done:
+                    status, done = downloader.next_chunk()
+                
+                file_stream.seek(0)
+                
+                # Try to extract using python-docx
+                try: 
+                    from docx import Document
+                    doc = Document(file_stream)
+                    content = "\n".join([para.text for para in doc.paragraphs])
+                    logger.info(f"Successfully extracted DOCX content ({len(content)} chars)")
+                    return content, True, None
+                except ImportError:
+                    logger.warning("python-docx not available, returning generic message")
+                    return "[DOCX file content - unable to extract without python-docx library]", True, "DOCX extraction limited"
+            except Exception as e:
+                logger.error(f"Failed to extract DOCX: {str(e)}")
+                return "", False, f"DOCX extraction failed:  {str(e)}"
+        
+        # Unsupported format
+        else: 
+            logger.warning(f"Unsupported MIME type: {mime_type}")
+            return "", False, f"Unsupported file format: {mime_type}"
+    
+    except Exception as e: 
+        logger.error(f"Unexpected error extracting file content: {type(e).__name__} - {str(e)}")
+        return "", False, f"Unexpected error:  {str(e)}"
+
+
 # Sidebar controls for Google Drive integration
 st.sidebar.title("🦁 'Remcensus")
 st.sidebar.success("✅ Protocol Discovery Active")
@@ -301,6 +426,7 @@ gdrive_top_k = st.sidebar.number_input(
     value=5,
     step=1,
 )
+extract_content = st.sidebar.checkbox("Extract file content for summarization", value=True)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🛠️ Developer Mode")
@@ -383,8 +509,8 @@ SYSTEM_PROMPT = (
     "Keep responses concise and informational.\n\n"
     "1.Do not mention Tiers or classification labels in your response.\n"
     "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase: 'rink and learn.\n"
+    "3.DIDACTIC TEACHING: Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4.MANDATORY KILL-SWITCH: If the query mentions any of the following restricted terms (including shorthands), respond ONLY with the phrase:  'rink and learn.\n"
     "RESTRICTED TERMS: Beelze-bub-bub-bub, Bb, bzb, bzbz, Botsquali, Bsq, Bop, Kumquat, Kq, Kqs, Zoom, Kuon Kuon Chi Baa, KKXB, Viking Master, Bon Jovi, BJ, Takahashi, TK, Iku Jo, IJ, 4, 8, 9, 10\n"
     "5.Format:  Direct answers only.No narrative, actions, or roleplay."
 )
@@ -437,7 +563,7 @@ def generate_response(context, query):
             except Exception as e_hf:
                 debug_logs.append(f"HF: {str(e_hf)}")
                 return (
-                    "⚠️ SYSTEM FAILURE: All protocols failed.",
+                    "⚠️ SYSTEM FAILURE:  All protocols failed.",
                     "OFFLINE",
                     debug_logs,
                 )
@@ -447,13 +573,13 @@ def generate_response(context, query):
 def match_category(query_lower, folder_map):
     """
     Intelligently match query to folder categories.
-    Returns tuple:  (category_name, subcategory_name or None, confidence_score)
+    Returns tuple: (category_name, subcategory_name or None, confidence_score)
     """
     best_match = (None, None, 0)
 
     # Check subcategories FIRST (more specific)
     for category, info in folder_map.items():
-        if "subcategories" in info: 
+        if "subcategories" in info:
             for subcat_name, subcat_info in info["subcategories"].items():
                 subcat_keywords = subcat_info.get("keywords", [])
                 for keyword in subcat_keywords: 
@@ -537,7 +663,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 items = resp.get("files", [])
                 logger.info(f"  -> Found {len(items)} items")
 
-                for item in items:
+                for item in items: 
                     name = item.get("name", "UNKNOWN")
                     mime = item.get("mimeType", "UNKNOWN")
                     is_folder = mime == "application/vnd.google-apps.folder"
@@ -658,7 +784,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             )
 
             # Filter to ONLY items with score > 0, then take top_k
-            items = [item for score, item in scored_items if score > 0][: top_k]
+            items = [item for score, item in scored_items if score > 0][:  top_k]
 
             # If no items scored > 0, fall back to top by recency
             if not items: 
@@ -702,7 +828,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                     item["createdTimeISO"] = item.get("createdTime")
 
             if "modifiedTime" in item:
-                try:
+                try: 
                     dt = datetime.fromisoformat(
                         item["modifiedTime"].replace("Z", "+00:00")
                     )
@@ -743,9 +869,11 @@ if query:
             "use_gdrive": use_gdrive,
             "drive_id": drive_id_input,
             "gdrive_top_k": gdrive_top_k,
+            "extract_content": extract_content,
             "category_detection": None,
             "pinecone_results": [],
             "drive_results": [],
+            "extracted_content": [],
             "context_sources": [],
             "llm_engine_used": None,
             "errors": [],
@@ -783,7 +911,7 @@ if query:
                     {
                         "source": meta.get("source", "Unknown"),
                         "score": match.get("score", "N/A"),
-                        "content_preview": meta.get("text", "")[:100] + "...",
+                        "content_preview": meta.get("text", "")[: 100] + "...",
                     }
                 )
 
@@ -870,6 +998,43 @@ if query:
                                 st.write(f"- Created: {created}")
                                 st.write(f"- Type: {mime}")
                                 st.write(f"- Link: {link}")
+
+                            # Extract content from files if enabled
+                            if extract_content: 
+                                logger.info("Step 2d: Extracting file content...")
+                                st.write("### 📄 Extracting file content...")
+                                extraction_progress = st.progress(0)
+
+                                for idx, f in enumerate(drive_files):
+                                    file_id = f.get("id")
+                                    file_name = f.get("name")
+                                    mime_type = f.get("mimeType")
+
+                                    logger.info(f"Extracting content from:  {file_name}")
+                                    content, success, error = extract_file_content(
+                                        st.session_state.drive_service,
+                                        file_id,
+                                        mime_type,
+                                        file_name,
+                                    )
+
+                                    if success: 
+                                        st.write(f"✅ Extracted:  {file_name}")
+                                        search_process["extracted_content"].append({
+                                            "filename": file_name,
+                                            "mime_type": mime_type,
+                                            "content_preview": content[:200] + "...",
+                                            "content_length": len(content),
+                                        })
+                                        # Add extracted content to context
+                                        context_text += f"\n\n--- Content from {file_name} ---\n{content[: 5000]}\n"
+                                    else:
+                                        st.write(f"⚠️ Failed to extract:  {file_name} - {error}")
+                                        search_process["errors"].append(
+                                            f"Content extraction failed for {file_name}: {error}"
+                                        )
+
+                                    extraction_progress.progress((idx + 1) / len(drive_files))
 
                             # Append drive metadata into context so LLMs can reference it
                             context_text += (
@@ -958,7 +1123,7 @@ if query:
                         st.write(
                             f"**Drive Search Enabled:** {search_process['use_gdrive']}"
                         )
-                        st.write(f"**Drive ID:** `{search_process['drive_id']}`")
+                        st.write(f"**Extract Content:** {search_process['extract_content']}")
 
                     # Category detection
                     if search_process["category_detection"]:
@@ -1001,11 +1166,21 @@ if query:
                                     st.write(f"Modified: {result['modified']}")
                                 st.write(f"Link: {result['link']}")
 
+                    # Extracted content
+                    if search_process["extracted_content"]:
+                        st.markdown("#### 4️⃣ Extracted File Content")
+                        for content in search_process["extracted_content"]:
+                            with st.container():
+                                st.write(f"**{content['filename']}**")
+                                st.write(f"  - Type: `{content['mime_type']}`")
+                                st.write(f"  - Length: {content['content_length']} characters")
+                                st.write(f"  - Preview: {content['content_preview']}")
+
                     # LLM Engine
                     st.markdown("#### 5️⃣ LLM Processing")
                     st.write(f"**Engine Used:** {search_process['llm_engine_used']}")
                     st.write(
-                        f"**Context Sources Combined:** {len(search_process['pinecone_results']) + len(search_process['drive_results'])} sources"
+                        f"**Context Sources Combined:** {len(search_process['pinecone_results']) + len(search_process['drive_results'])} files"
                     )
 
                     # Errors (if any)
@@ -1048,7 +1223,7 @@ if query:
                     st.write(f"**Error Message:** {str(e)}")
                     st.write(f"**Query:** `{query}`")
                     st.write(f"**Drive Metadata Enabled:** {use_gdrive}")
-                    st.write(f"**Drive ID:** `{drive_id_input}`")
+                    st.write(f"**Extract Content:** {extract_content}")
 
                     # Show all relevant session state
                     st.markdown("### Session State")
