@@ -774,9 +774,15 @@ if query:
                         )
 
                         logger.info("Step 2b: Recursively searching Drive folders...")
-                        drive_files = fetch_drive_recent_files(
-                            drive_id_input, top_k=gdrive_top_k, search_query=query
-                        )
+                        drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k, search_query=query)
+
+                        # ADD THIS DEBUG OUTPUT
+                        st.write("🔍 DEBUG INFO:")
+                        st.write(f"Number of files returned: {len(drive_files) if drive_files else 0}")
+                        if drive_files:
+                            st.write("Files found:")
+                            for f in drive_files:
+                                st.write(f"  - {f.get('name')} ({f.get('mimeType')})")
 
                         if drive_files:
                             logger.info(
