@@ -373,30 +373,31 @@ def generate_response(context, query):
 # --- 5.FOLDER STRUCTURE INTELLIGENCE ---
 def match_category(query_lower, folder_map):
     """
-    Intelligently match query to folder categories.
-    Returns tuple:   (category_name, subcategory_name or None, confidence_score)
+    Intelligently match query to folder categories.  
+    Returns tuple:  (category_name, subcategory_name or None, confidence_score)
     """
     best_match = (None, None, 0)
     
+    # Check subcategories FIRST (more specific)
     for category, info in folder_map.items():
-        category_keywords = info.get("keywords", [])
-        
-        # Check for main category match
-        for keyword in category_keywords:
-            if keyword in query_lower:  
-                confidence = len(keyword) / len(query_lower)
-                if confidence > best_match[2]:
-                    best_match = (category, None, confidence)
-        
-        # Check for subcategories
-        if "subcategories" in info:  
+        if "subcategories" in info: 
             for subcat_name, subcat_info in info["subcategories"].items():
-                subcat_keywords = subcat_info.get("keywords", [])
-                for keyword in subcat_keywords:  
+                subcat_keywords = subcat_info. get("keywords", [])
+                for keyword in subcat_keywords: 
                     if keyword in query_lower:
                         confidence = len(keyword) / len(query_lower)
                         if confidence > best_match[2]:
                             best_match = (category, subcat_name, confidence)
+    
+    # Check main categories ONLY if no subcategory matched
+    if best_match[2] == 0:
+        for category, info in folder_map.items():
+            category_keywords = info.get("keywords", [])
+            for keyword in category_keywords:
+                if keyword in query_lower:
+                    confidence = len(keyword) / len(query_lower)
+                    if confidence > best_match[2]:
+                        best_match = (category, None, confidence)
     
     return best_match
 
