@@ -565,7 +565,10 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         logger.info(
             f"Successfully fetched {len(all_items)} files from folder/drive (searched {len(searched_folders)} folders)"
         )
-        logger.debug(f"Files found: {[item. get('name') for item in all_items]}")
+        logger.debug(f"Files found: {[item.get('name') for item in all_items]}")
+        logger.info(f"ALL FILES FOUND (BEFORE SCORING): {len(all_items)} files")
+        for f in all_items:
+            logger.info(f"  - {f.get('name')}")
 
         if len(all_items) == 0:
             logger.warning("No files found in the entire folder hierarchy!")
@@ -624,7 +627,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
                 scored_items.append((score, item))
                 if score > 0:
-                    logger.debug(f"File:    {item. get('name')} - Score: {score}")
+                    logger.debug(f"File:    {item.get('name')} - Score: {score}")
 
             # Sort by score (descending) then by modified time
             scored_items.sort(
@@ -636,7 +639,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
             )
             items = [item for _, item in scored_items[:top_k]]
             logger.info(f"Top {len(items)} files after intelligent scoring")
-            logger.debug(f"Top files: {[f. get('name') for f in items]}")
+            logger.debug(f"Top files: {[f.get('name') for f in items]}")
         else:
             items = all_items[:top_k]
             logger.debug(
@@ -672,7 +675,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         return items
 
     except HttpError as e:
-        logger.error(f"HTTP error fetching drive items: {e. resp.status} - {e.content}")
+        logger.error(f"HTTP error fetching drive items: {e.resp.status} - {e.content}")
         raise
     except GoogleAPICallError as e:
         logger.error(f"Google API error fetching drive items: {str(e)}")
