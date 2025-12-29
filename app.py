@@ -40,86 +40,86 @@ st.set_page_config(
 
 # --- FOLDER STRUCTURE MAP (Update this when Drive changes) ---
 RACRL_FOLDER_MAP = {
-    "Education": {
-        "folder_id": "A.  'Remducation",
-        "keywords": ["education", "curriculum", "learning", "training", "beginner"],
-        "priority": 1
+    "Education":{
+        "folder_id":"A.  'Remducation",
+        "keywords":["education", "curriculum", "learning", "training", "beginner"],
+        "priority":1
     },
-    "Registry": {
-        "folder_id": "B. The Registry",
-        "keywords": ["registry", "register", "national"],
-        "priority": 2
+    "Registry":{
+        "folder_id":"B. The Registry",
+        "keywords":["registry", "register", "national"],
+        "priority":2
     },
-    "Puzzles": {
-        "folder_id": "C. 'uzzles",
-        "keywords": ["puzzle", "puzzles", "challenge", "scenario"],
-        "priority": 3
+    "Puzzles":{
+        "folder_id":"C. 'uzzles",
+        "keywords":["puzzle", "puzzles", "challenge", "scenario"],
+        "priority":3
     },
-    "Exam Prep": {
-        "folder_id": "D.   Exam 'rep",
-        "keywords": ["exam", "prep", "preparation", "curriculum", "variation"],
-        "priority": 4
+    "Exam Prep":{
+        "folder_id":"D.   Exam 'rep",
+        "keywords":["exam", "prep", "preparation", "curriculum", "variation"],
+        "priority":4
     },
-    "Publications": {
-        "folder_id": "E. 'ublications",
-        "keywords":  ["publication", "research", "paper", "article", "mash"],
-        "priority": 5
+    "Publications":{
+        "folder_id":"E. 'ublications",
+        "keywords": ["publication", "research", "paper", "article", "mash"],
+        "priority":5
     },
-    "SPUDS": {
-        "folder_id": "F.  SPUDS",
-        "keywords": ["spuds", "guide", "hymn", "trial"],
-        "priority": 6
+    "SPUDS":{
+        "folder_id":"F.  SPUDS",
+        "keywords":["spuds", "guide", "hymn", "trial"],
+        "priority":6
     },
-    "RANZCCP": {
-        "folder_id": "G. RANZCCP",
-        "keywords": ["ranzccp", "establishment"],
-        "priority": 7
+    "RANZCCP":{
+        "folder_id":"G. RANZCCP",
+        "keywords":["ranzccp", "establishment"],
+        "priority":7
     },
-    "Minutes": {
-        "folder_id": "H. Minutes",
-        "keywords": ["minutes", "meeting", "nha", "vha", "waha"],
-        "priority": 8,
-        "subcategories": {
-            "NHA": {
-                "keywords":  ["nha", "national high able"],
-                "priority": 1
+    "Minutes":{
+        "folder_id":"H. Minutes",
+        "keywords":["minutes", "meeting", "nha", "vha", "waha"],
+        "priority":8,
+        "subcategories":{
+            "NHA":{
+                "keywords": ["nha", "national high able"],
+                "priority":1
             },
-            "VHA": {
-                "keywords": ["vha", "victorian high able"],
-                "priority": 2
+            "VHA":{
+                "keywords":["vha", "victorian high able"],
+                "priority":2
             },
-            "WAHA": {
-                "keywords": ["waha", "western"],
-                "priority": 3
+            "WAHA":{
+                "keywords":["waha", "western"],
+                "priority":3
             }
         }
     },
-    "Rulings": {
-        "folder_id": "I. Other Rulings",
-        "keywords": ["ruling", "recommendation", "deck chair"],
-        "priority": 9
+    "Rulings":{
+        "folder_id":"I. Other Rulings",
+        "keywords":["ruling", "recommendation", "deck chair"],
+        "priority":9
     },
-    "History": {
-        "folder_id": "J. Extra History",
-        "keywords": ["history", "anecdote", "event", "botsquali", "sahasa", "game"],
-        "priority": 10
+    "History":{
+        "folder_id":"J. Extra History",
+        "keywords":["history", "anecdote", "event", "botsquali", "sahasa", "game"],
+        "priority":10
     }
 }
 
 # Year patterns (for sorting - most recent first)
 YEAR_PRIORITY = {
-    "2025": 1,
-    "202BJ": 2,  # 2024
-    "2023": 3,
-    "2022": 4,
-    "2021": 5,
-    "2020": 6,
-    "2017": 7,
-    "2016": 8,
-    "2015": 9,
-    "2010": 10,
-    "pre-2015": 11,
-    "old": 12
+    "2025":1,
+    "202BJ":2,  # 2024
+    "2023":3,
+    "2022":4,
+    "2021":5,
+    "2020":6,
+    "2017":7,
+    "2016":8,
+    "2015":9,
+    "2010":10,
+    "pre-2015":11,
+    "old":12
 }
 
 # --- GOOGLE DRIVE SERVICE INITIALIZATION ---
@@ -308,7 +308,7 @@ if 'init_done' not in st.session_state:
 def enforce_rem_lexicon(text):
     text = re.sub(r'\bP', "'", text)
     text = re.sub(r'\bp', "'", text)
-    replacements = {"Table": "'able", "table": "'able", "Drink": "'rink", "drink": "'rink"}
+    replacements = {"Table":"'able", "table":"'able", "Drink":"'rink", "drink":"'rink"}
     for word, replacement in replacements.items():
         text = text.replace(word, replacement)
     num_map = [
@@ -344,7 +344,7 @@ def generate_response(context, query):
     debug_logs = []
     try:
         chat_completion = st.session_state.groq_client.chat.completions.create(
-            messages=[{"role": "system", "content":    SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+            messages=[{"role":"system", "content":   SYSTEM_PROMPT}, {"role":"user", "content":f"Context: {context}\n\nQuestion: {query}"}],
             model="llama-3.3-70b-versatile",
         )
         return chat_completion.choices[0].  message.content, "Groq (Llama 3.3)", debug_logs
@@ -362,7 +362,7 @@ def generate_response(context, query):
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
-                    messages=[{"role":    "system", "content":   SYSTEM_PROMPT}, {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}],
+                    messages=[{"role":   "system", "content":  SYSTEM_PROMPT}, {"role":"user", "content":f"Context: {context}\n\nQuestion: {query}"}],
                     max_tokens=800
                 )
                 return response. choices[0].message.content, "Hugging Face (Llama 3.2)", debug_logs
@@ -557,17 +557,17 @@ if query:
     with st.spinner("🌀 Triage in progress..."):
         # Initialize search process tracking
         search_process = {
-            "query": query,
-            "timestamp": datetime.now().isoformat(),
-            "use_gdrive": use_gdrive,
-            "drive_id":  drive_id_input,
-            "gdrive_top_k": gdrive_top_k,
-            "category_detection": None,
-            "pinecone_results": [],
-            "drive_results": [],
-            "context_sources": [],
-            "llm_engine_used": None,
-            "errors": []
+            "query":query,
+            "timestamp":datetime.now().isoformat(),
+            "use_gdrive":use_gdrive,
+            "drive_id": drive_id_input,
+            "gdrive_top_k":gdrive_top_k,
+            "category_detection":None,
+            "pinecone_results":[],
+            "drive_results":[],
+            "context_sources":[],
+            "llm_engine_used":None,
+            "errors":[]
         }
         
         try:
@@ -591,9 +591,9 @@ if query:
                 meta = match['metadata']
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
                 search_process["pinecone_results"].append({
-                    "source": meta.get('source', 'Unknown'),
-                    "score": match. get('score', 'N/A'),
-                    "content_preview": meta.get('text', '')[: 100] + "..."
+                    "source":meta.get('source', 'Unknown'),
+                    "score":match. get('score', 'N/A'),
+                    "content_preview":meta.get('text', '')[: 100] + "..."
                 })
             
             logger.info(f"Pinecone returned {len(search_results['matches'])} results")
@@ -611,11 +611,11 @@ if query:
                         logger.info("Step 2a: Detecting category intent from query...")
                         category_match, subcategory_match, category_confidence = match_category(query. lower(), RACRL_FOLDER_MAP)
                         search_process["category_detection"] = {
-                            "category": category_match,
-                            "subcategory": subcategory_match,
-                            "confidence": category_confidence
+                            "category":category_match,
+                            "subcategory":subcategory_match,
+                            "confidence":category_confidence
                         }
-                        logger.info(f"Category detected: {category_match} > {subcategory_match} (confidence: {category_confidence:. 2f})")
+                        logger.info(f"Category detected: {category_match} > {subcategory_match} (confidence: {category_confidence:.2f})")
                         
                         logger.info("Step 2b: Recursively searching Drive folders...")
                         drive_files = fetch_drive_recent_files(drive_id_input, top_k=gdrive_top_k, search_query=query)
@@ -625,12 +625,12 @@ if query:
                             
                             for idx, f in enumerate(drive_files):
                                 search_process["drive_results"].append({
-                                    "rank": idx + 1,
-                                    "name": f.get('name'),
-                                    "mime_type": f.get('mimeType'),
-                                    "created": f.get('createdTimeISO'),
-                                    "modified": f.get('modifiedTimeISO'),
-                                    "link": f.get('webViewLink')
+                                    "rank":idx + 1,
+                                    "name":f.get('name'),
+                                    "mime_type":f.get('mimeType'),
+                                    "created":f.get('createdTimeISO'),
+                                    "modified":f.get('modifiedTimeISO'),
+                                    "link":f.get('webViewLink')
                                 })
                             
                             # If the user directly asked for the most recent file, show it immediately
