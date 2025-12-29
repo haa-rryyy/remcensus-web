@@ -569,40 +569,58 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
 
         all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
 
-        if search_query:
+        if search_query: 
             search_terms = [
                 term for term in search_query.lower().split() if len(term) > 2
-            ]
-            scored_items = []
+    ]
+    scored_items = []
 
-            logger.info(
-                f"Scoring {len(all_items)} files against search terms: {search_terms}"
-            )
+    logger.info(
+        f"Scoring {len(all_items)} files against search terms: {search_terms}"
+    )
 
-            for item in all_items:
-                name_lower = item.get("name", "").lower()
-                desc_lower = (
-                    item.get("description", "").lower()
-                    if item.get("description")
-                    else ""
+    for item in all_items:
+        name_lower = item.get("name", "").lower()
+        desc_lower = (
+            item.get("description", "").lower()
+            if item.get("description")
+            else ""
+        )
+        score = 0
+
+        # Base scoring on filename/description
+        for term in search_terms:
+            if term in name_lower: 
+                score += 3
+            if term in desc_lower:
+                score += 1
+
+        # CRITICAL:  Add subcategory boost back! 
+        if category_match: 
+            category_info = RACRL_FOLDER_MAP.get(category_match, {})
+            if any(
+                kw in name_lower for kw in category_info.get("keywords", [])
+            ):
+                score += 5
+
+            if subcategory_match and "subcategories" in category_info:
+                subcat_info = category_info["subcategories"].get(
+                    subcategory_match, {}
                 )
-                score = 0
+                if any(
+                    kw in name_lower for kw in subcat_info.get("keywords", [])
+                ):
+                    score += 50  # BIG boost for matching subcategory
 
-                for term in search_terms:
-                    if term in name_lower:
-                        score += 3
-                    if term in desc_lower:
-                        score += 1
+        scored_items.append((score, item))
+        if score > 0:
+            logger.debug(f"File:  {item.get('name')} - Score: {score}")
 
-                scored_items.append((score, item))
-                if score > 0:
-                    logger.debug(f"File:  {item.get('name')} - Score: {score}")
-
-            scored_items.sort(
-                key=lambda x: (-x[0], x[1].get("modifiedTime", "")), reverse=True
-            )
-            items = [item for _, item in scored_items[:top_k]]
-            logger.info(f"Top {len(items)} files after intelligent scoring")
+    scored_items.sort(
+        key=lambda x: (-x[0], x[1]. get("modifiedTime", "")), reverse=True
+    )
+    items = [item for _, item in scored_items[: top_k]]
+    logger.info(f"Top {len(items)} files after intelligent scoring")
         else:
             items = all_items[:top_k]
             logger.debug(
