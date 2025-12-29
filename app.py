@@ -429,7 +429,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         category_match, subcategory_match, category_confidence = None, None, 0
         if search_query:
             category_match, subcategory_match, category_confidence = match_category(search_query. lower(), RACRL_FOLDER_MAP)
-            logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:. 2f}")
+            logger.info(f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}")
         
         all_items = []
         folders_to_search = [drive_id]
