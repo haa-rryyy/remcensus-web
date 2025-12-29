@@ -624,9 +624,22 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                         ):
                             score += 50
 
-                scored_items.append((score, item))
-                if score > 0:
-                    logger.debug(f"File:   {item.get('name')} - Score: {score}")
+                        scored_items.append((score, item))
+        
+                        # DEBUG LOGGING FOR WAHA FILES
+                        if "waha" in name_lower or "meeting" in name_lower or "minutes" in name_lower:
+                            logger.info(f"SCORING DEBUG: {item.get('name')}")
+                            logger.info(f"  -> name_lower: {name_lower}")
+                            logger.info(f"  -> search_terms: {search_terms}")
+                            logger.info(f"  -> category_match: {category_match}")
+                            logger.info(f"  -> subcategory_match: {subcategory_match}")
+                            logger.info(f"  -> category_keywords: {RACRL_FOLDER_MAP.get(category_match, {}).get('keywords', [])}")
+                            if subcategory_match:
+                                logger.info(f"  -> subcategory_keywords: {RACRL_FOLDER_MAP.get(category_match, {}).get('subcategories', {}).get(subcategory_match, {}).get('keywords', [])}")
+                            logger.info(f"  -> FINAL SCORE: {score}")
+        
+                        if score > 0:
+                            logger.debug(f"File:    {item.get('name')} - Score: {score}")
 
             scored_items.sort(
                 key=lambda x: (-x[0], x[1].get("modifiedTime", "")), reverse=True
