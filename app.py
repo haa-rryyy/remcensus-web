@@ -991,19 +991,19 @@ if query:
                 logger.error(f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}")
                 search_process["errors"].append(f"Drive search error: {str(e_drive)}")
 
-           # Step 3: Generate response with CLEAN context
-           logger.info("Step 3: Preparing context for LLM...")
+        # Step 3: Generate response with CLEAN context
+        logger.info("Step 3: Preparing context for LLM...")
 
-           # Keep original for logging
-           context_for_llm = context_text.copy() if isinstance(context_text, str) else str(context_text)
+        # Keep original for logging
+        context_for_llm = context_text.copy() if isinstance(context_text, str) else str(context_text)
 
-           # Remove metadata from context sent to LLM (keep it clean)
-           context_for_llm = re.sub(
-               r'\n---\nGoogle Drive Files Found:\n.*? (?=\n\n|\Z)',
-               '',
-               context_for_llm,
-               flags=re.DOTALL
-           )
+        # Remove metadata from context sent to LLM (keep it clean)
+        context_for_llm = re.sub(
+            r'\n---\nGoogle Drive Files Found:\n.*? (?=\n\n|\Z)',
+            '',
+            context_for_llm,
+            flags=re.DOTALL
+        )
 
            logger.info(f"Context sent to LLM: {len(context_for_llm)} chars (cleaned)")
 
