@@ -5,12 +5,13 @@ from huggingface_hub import InferenceClient
 from pinecone import Pinecone
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
 import os
 import traceback
 import io
+from dateutil import parser as dateutil_parser
 
 # Google Drive API imports
 from google.auth.transport.requests import Request
@@ -21,7 +22,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 import PyPDF2
 
-# Configure logging with detailed formatting
+# Configure logging (no UI output)
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s",
@@ -41,7 +42,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- FOLDER STRUCTURE MAP (Update this when Drive changes) ---
+# --- SCORE THRESHOLD CONFIGURATION ---
+SCORE_THRESHOLD = 8  # Minimum score for a file to be included in results
+
+# --- FOLDER STRUCTURE MAP ---
 RACRL_FOLDER_MAP = {
     "Education": {
         "folder_id": "A. 'Remducation",
@@ -84,7 +88,7 @@ RACRL_FOLDER_MAP = {
         "priority": 8,
         "subcategories": {
             "NHA": {"keywords": ["nha", "national high able"], "priority": 1},
-            "VHA": {"keywords":   ["vha", "victorian high able"], "priority": 2},
+            "VHA": {"keywords": ["vha", "victorian high able"], "priority": 2},
             "WAHA": {"keywords": ["waha", "western"], "priority": 3},
         },
     },
@@ -117,23 +121,193 @@ YEAR_PRIORITY = {
 }
 
 
+# --- DATE/TIME PARSING & FILTERING ---
+def parse_date(date_string):
+    """
+    Parse various date formats intelligently.
+    Supports:  DMY, MDY, YMD, ISO 8601, Full, Medium, etc.
+    
+    Returns:  datetime object or None if parsing fails
+    """
+    if not date_string:
+        return None
+    
+    try:
+        # Try dateutil parser first (most flexible)
+        # dayfirst=True prioritizes DMY over MDY
+        parsed_date = dateutil_parser.parse(date_string, dayfirst=True, fuzzy=True)
+        logger.debug(f"Successfully parsed date: '{date_string}' -> {parsed_date.isoformat()}")
+        return parsed_date
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Failed to parse date '{date_string}': {str(e)}")
+        return None
+
+
+def extract_date_constraints_from_query(query):
+    """
+    Extract date-based constraints from query.
+    Detects: 'most recent', 'latest', 'within X days/months/years', 'after/before DATE', 'in YEAR', etc.
+    
+    Returns: dict with constraint info
+    """
+    query_lower = query.lower()
+    constraints = {
+        "most_recent": False,
+        "latest": False,
+        "within_days": None,
+        "within_months":  None,
+        "within_years": None,
+        "after_date": None,
+        "before_date": None,
+        "specific_year": None,
+    }
+    
+    # Check for "most recent" / "latest"
+    if "most recent" in query_lower or "latest" in query_lower: 
+        constraints["most_recent"] = True
+        constraints["latest"] = True
+        logger.debug("Detected 'most recent' constraint")
+    
+    # Check for "within X days"
+    within_days_match = re.search(r'within\s+(\d+)\s+days?', query_lower)
+    if within_days_match:
+        constraints["within_days"] = int(within_days_match.group(1))
+        logger.debug(f"Detected 'within {constraints['within_days']} days' constraint")
+    
+    # Check for "within X months"
+    within_months_match = re.search(r'within\s+(\d+)\s+months?', query_lower)
+    if within_months_match:
+        constraints["within_months"] = int(within_months_match.group(1))
+        logger.debug(f"Detected 'within {constraints['within_months']} months' constraint")
+    
+    # Check for "within X years"
+    within_years_match = re.search(r'within\s+(? :the\s+)?last\s+(\d+)\s+years?', query_lower)
+    if within_years_match:
+        constraints["within_years"] = int(within_years_match.group(1))
+        logger.debug(f"Detected 'within {constraints['within_years']} years' constraint")
+    
+    # Check for "after DATE"
+    after_match = re.search(r'after\s+([^\s,]+(? :\s+[^\s,]+)*)', query_lower)
+    if after_match:
+        date_str = after_match.group(1)
+        parsed = parse_date(date_str)
+        if parsed:
+            constraints["after_date"] = parsed
+            logger.debug(f"Detected 'after {parsed.isoformat()}' constraint")
+    
+    # Check for "before DATE"
+    before_match = re.search(r'before\s+([^\s,]+(?:\s+[^\s,]+)*)', query_lower)
+    if before_match:
+        date_str = before_match.group(1)
+        parsed = parse_date(date_str)
+        if parsed:
+            constraints["before_date"] = parsed
+            logger.debug(f"Detected 'before {parsed.isoformat()}' constraint")
+    
+    # Check for specific year (e.g., "in 2025", "from 2020")
+    year_match = re.search(r'(? :in|from)\s+(20\d{2}|19\d{2})', query_lower)
+    if year_match:
+        constraints["specific_year"] = int(year_match.group(1))
+        logger.debug(f"Detected 'specific year {constraints['specific_year']}' constraint")
+    
+    return constraints
+
+
+def apply_date_filter(files, constraints, current_time=None):
+    """
+    Filter files based on date constraints.
+    
+    Args:
+        files: List of file objects with 'modifiedTime' or 'createdTime'
+        constraints: Dict from extract_date_constraints_from_query
+        current_time: Reference time for relative calculations (defaults to now)
+    
+    Returns: Filtered list of files
+    """
+    if current_time is None:
+        current_time = datetime.now(tz=datetime.now().astimezone().tzinfo or __import__('datetime').timezone.utc)
+    
+    if not any(constraints.values()):
+        logger.debug("No date constraints detected, returning all files")
+        return files
+    
+    filtered_files = []
+    
+    for file in files:
+        # Get the file's modified or created time
+        time_str = file.get("modifiedTime") or file.get("createdTime")
+        if not time_str:
+            logger.warning(f"File {file.get('name')} has no time metadata, including anyway")
+            filtered_files.append(file)
+            continue
+        
+        try:
+            file_time = dateutil_parser.isoparse(time_str)
+            
+            # Make sure both datetimes are timezone-aware for comparison
+            if file_time.tzinfo is None:
+                file_time = file_time.replace(tzinfo=datetime.now().astimezone().tzinfo or __import__('datetime').timezone.utc)
+            if current_time.tzinfo is None:
+                current_time = current_time.replace(tzinfo=datetime.now().astimezone().tzinfo or __import__('datetime').timezone.utc)
+            
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse file time {time_str}: {str(e)}")
+            filtered_files.append(file)  # Include if parsing fails
+            continue
+        
+        include_file = True
+        
+        # Check "within X days" constraint
+        if constraints["within_days"]:
+            cutoff = current_time - timedelta(days=constraints["within_days"])
+            if file_time < cutoff:
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (older than {constraints['within_days']} days)")
+        
+        # Check "within X months" constraint
+        if constraints["within_months"] and include_file:
+            cutoff = current_time - timedelta(days=constraints["within_months"] * 30)  # Approximate
+            if file_time < cutoff:
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (older than {constraints['within_months']} months)")
+        
+        # Check "within X years" constraint
+        if constraints["within_years"] and include_file:
+            cutoff = current_time - timedelta(days=constraints["within_years"] * 365)  # Approximate
+            if file_time < cutoff: 
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (older than {constraints['within_years']} years)")
+        
+        # Check "after DATE" constraint
+        if constraints["after_date"] and include_file:
+            if file_time < constraints["after_date"]: 
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (before {constraints['after_date'].isoformat()})")
+        
+        # Check "before DATE" constraint
+        if constraints["before_date"] and include_file:
+            if file_time > constraints["before_date"]:
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (after {constraints['before_date'].isoformat()})")
+        
+        # Check specific year constraint
+        if constraints["specific_year"] and include_file:
+            if file_time.year != constraints["specific_year"]:
+                include_file = False
+                logger.debug(f"File {file.get('name')} excluded (not from year {constraints['specific_year']})")
+        
+        if include_file:
+            filtered_files.append(file)
+    
+    logger.info(f"Date filtering:  {len(files)} files -> {len(filtered_files)} files after constraints")
+    return filtered_files
+
+
 # --- GOOGLE DRIVE SERVICE INITIALIZATION ---
 def initialize_drive_service():
-    """
-    Initialize Google Drive service with detailed error logging and debugging.
-
-    Returns:
-        googleapiclient.discovery.Resource: The Drive service resource, or None if initialization fails.
-    """
-    try: 
-        logger.info("=" * 80)
+    """Initialize Google Drive service with detailed error logging."""
+    try:
         logger.info("Starting Google Drive Service Initialization")
-        logger.info("=" * 80)
-
-        # Step 1: Check Streamlit secrets for credentials
-        logger.debug(
-            "Attempting to read GDRIVE_SERVICE_ACCOUNT_JSON from Streamlit secrets..."
-        )
 
         try:
             cred_json = st.secrets.get("GDRIVE_SERVICE_ACCOUNT_JSON")
@@ -147,144 +321,73 @@ def initialize_drive_service():
 
         logger.info("GDRIVE_SERVICE_ACCOUNT_JSON found in Streamlit secrets")
 
-        # Step 2: Parse credentials (handle both string and dict)
-        logger.debug("Parsing credentials JSON...")
-        try:
-            if isinstance(cred_json, dict):
-                cred_content = cred_json
-                logger.debug("Credentials loaded as dict from secrets")
-            elif isinstance(cred_json, str):
-                cred_content = json.loads(cred_json)
-                logger.debug("Credentials parsed from JSON string")
-            else:
-                logger.error(f"Unexpected credentials type: {type(cred_json)}")
-                return None
-
-            logger.debug(f"Credentials file structure: {list(cred_content.keys())}")
-
-            # Validate required fields
-            required_fields = [
-                "type",
-                "project_id",
-                "private_key_id",
-                "private_key",
-                "client_email",
-            ]
-            missing_fields = [
-                field for field in required_fields if field not in cred_content
-            ]
-
-            if missing_fields:
-                logger.error(
-                    f"Missing required fields in credentials: {missing_fields}"
-                )
-                return None
-
-            logger.debug(f"Credentials project_id: {cred_content.get('project_id')}")
-            logger.debug(
-                f"Credentials client_email: {cred_content.get('client_email')}"
-            )
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse credentials JSON: {str(e)}")
-            return None
-        except Exception as e:  
-            logger.error(
-                f"Unexpected error parsing credentials: {type(e).__name__} - {str(e)}"
-            )
+        if isinstance(cred_json, dict):
+            cred_content = cred_json
+        elif isinstance(cred_json, str):
+            cred_content = json.loads(cred_json)
+        else:
+            logger.error(f"Unexpected credentials type: {type(cred_json)}")
             return None
 
-        # Step 3: Create service account credentials
+        required_fields = ["type", "project_id", "private_key_id", "private_key", "client_email"]
+        missing_fields = [field for field in required_fields if field not in cred_content]
+
+        if missing_fields:
+            logger.error(f"Missing required fields in credentials: {missing_fields}")
+            return None
+
         logger.info("Creating service account credentials...")
         try:
             scopes = [
                 "https://www.googleapis.com/auth/drive.metadata.readonly",
                 "https://www.googleapis.com/auth/drive.readonly",
             ]
-            logger.debug(f"Using scopes: {scopes}")
 
-            credentials = Credentials.from_service_account_info(
-                cred_content, scopes=scopes
-            )
+            credentials = Credentials.from_service_account_info(cred_content, scopes=scopes)
             logger.info("Service account credentials created successfully")
-            logger.debug(f"Credentials type: {type(credentials)}")
-            logger.debug(f"Credentials valid: {credentials.valid}")
 
         except ValueError as e:
             logger.error(f"Invalid service account credentials: {str(e)}")
             return None
-        except Exception as e:
-            logger.error(
-                f"Unexpected error creating credentials: {type(e).__name__} - {str(e)}"
-            )
-            return None
 
-        # Step 4: Refresh credentials if needed
-        logger.info("Checking if credentials need refresh...")
         try:
             if not credentials.valid:
                 logger.debug("Credentials not valid, attempting refresh...")
                 credentials.refresh(Request())
                 logger.info("Credentials refreshed successfully")
-            else:
-                logger.debug("Credentials are valid, no refresh needed")
         except Exception as e:
-            logger.error(
-                f"Failed to refresh credentials: {type(e).__name__} - {str(e)}"
-            )
+            logger.error(f"Failed to refresh credentials:  {str(e)}")
             logger.debug("Continuing with unrefreshed credentials...")
 
-        # Step 5: Build Drive service
         logger.info("Building Google Drive service...")
         try:
-            service = build(
-                "drive", "v3", credentials=credentials, cache_discovery=False
-            )
+            service = build("drive", "v3", credentials=credentials, cache_discovery=False)
             logger.info("Google Drive service built successfully")
-            logger.debug(f"Service type: {type(service)}")
 
         except HttpError as e:
-            logger.error(
-                f"HTTP error building Drive service: {e.resp.status} - {e.content}"
-            )
+            logger.error(f"HTTP error building Drive service: {e.resp.status}")
             return None
         except GoogleAPICallError as e:
             logger.error(f"Google API error building Drive service: {str(e)}")
             return None
-        except Exception as e:  
-            logger.error(
-                f"Unexpected error building Drive service:   {type(e).__name__} - {str(e)}"
-            )
-            return None
 
-        # Step 6: Test the service
-        logger.info("Testing Google Drive service with a basic API call...")
+        logger.info("Testing Google Drive service...")
         try:
             results = (
                 service.files()
                 .list(spaces="drive", fields="files(id, name)", pageSize=1)
                 .execute()
             )
-
             logger.info("Google Drive service test successful")
-            logger.debug(f"Test returned {len(results.get('files', []))} items")
 
         except HttpError as e:
-            logger.error(
-                f"HTTP error testing Drive service: {e.resp.status} - {e.content}"
-            )
-            return None
-        except Exception as e:  
-            logger.error(f"Error testing Drive service: {type(e).__name__} - {str(e)}")
+            logger.error(f"HTTP error testing Drive service: {e.resp.status}")
             return None
 
-        logger.info("=" * 80)
         logger.info("Google Drive Service Initialization COMPLETED SUCCESSFULLY")
-        logger.info("=" * 80)
-
         return service
 
-    except Exception as e:  
+    except Exception as e:
         logger.critical(
             f"Unexpected error in initialize_drive_service: {type(e).__name__} - {str(e)}",
             exc_info=True,
@@ -294,69 +397,47 @@ def initialize_drive_service():
 
 # --- CONTENT EXTRACTION HELPER ---
 def extract_file_content(drive_service, file_id, mime_type, file_name):
-    """
-    Extract content from Google Drive files (Google Docs, PDFs, Google Sheets).
-    
-    Args:
-        drive_service:   Authenticated Drive service
-        file_id:  ID of the file to extract from
-        mime_type: MIME type of the file
-        file_name: Name of the file
-    
-    Returns:
-        tuple: (content_text, success_bool, error_message)
-    """
+    """Extract content from Google Drive files (Google Docs, PDFs, Google Sheets)."""
     try:
         logger.info(f"Extracting content from:   {file_name} (MIME: {mime_type})")
-        
-        # Google Docs
+
         if "vnd.google-apps.document" in mime_type:
             logger.debug("Detected Google Docs format")
             try:
-                # Export as plain text
-                request = drive_service.files().export(
-                    fileId=file_id, mimeType="text/plain"
-                )
+                request = drive_service.files().export(fileId=file_id, mimeType="text/plain")
                 content = request.execute().decode("utf-8")
                 logger.info(f"Successfully extracted Google Docs content ({len(content)} chars)")
                 return content, True, None
-            except Exception as e:
+            except Exception as e: 
                 logger.error(f"Failed to extract Google Docs:   {str(e)}")
                 return "", False, f"Google Docs extraction failed: {str(e)}"
-        
-        # Google Sheets
-        elif "vnd.google-apps.spreadsheet" in mime_type:
+
+        elif "vnd.google-apps.spreadsheet" in mime_type:  
             logger.debug("Detected Google Sheets format")
             try:
-                # Export as CSV
-                request = drive_service.files().export(
-                    fileId=file_id, mimeType="text/csv"
-                )
+                request = drive_service.files().export(fileId=file_id, mimeType="text/csv")
                 content = request.execute().decode("utf-8")
                 logger.info(f"Successfully extracted Google Sheets content ({len(content)} chars)")
                 return content, True, None
             except Exception as e:
                 logger.error(f"Failed to extract Google Sheets:  {str(e)}")
                 return "", False, f"Google Sheets extraction failed: {str(e)}"
-        
-        # PDF files
-        elif "application/pdf" in mime_type:  
+
+        elif "application/pdf" in mime_type:
             logger.debug("Detected PDF format")
             try:
-                # Download PDF to memory
                 request = drive_service.files().get_media(fileId=file_id)
                 file_stream = io.BytesIO()
                 downloader = MediaIoBaseDownload(file_stream, request)
                 done = False
-                
+
                 while not done:
                     status, done = downloader.next_chunk()
                     if status:  
                         logger.debug(f"Download progress: {int(status.progress() * 100)}%")
-                
+
                 file_stream.seek(0)
-                
-                # Extract text from PDF
+
                 pdf_reader = PyPDF2.PdfReader(file_stream)
                 content = ""
                 for page_num, page in enumerate(pdf_reader.pages):
@@ -366,29 +447,27 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                     except Exception as e:
                         logger.warning(f"Failed to extract page {page_num + 1}: {str(e)}")
                         content += f"\n--- Page {page_num + 1} ---\n[Unable to extract text from this page]"
-                
+
                 logger.info(f"Successfully extracted PDF content ({len(content)} chars from {len(pdf_reader.pages)} pages)")
                 return content, True, None
             except Exception as e:
                 logger.error(f"Failed to extract PDF:  {str(e)}")
                 return "", False, f"PDF extraction failed: {str(e)}"
-        
-        # Microsoft Word (.docx)
-        elif "vnd.openxmlformats-officedocument.wordprocessingml.document" in mime_type:
+
+        elif "vnd.openxmlformats-officedocument.wordprocessingml.document" in mime_type: 
             logger.debug("Detected DOCX format")
             try:
                 request = drive_service.files().get_media(fileId=file_id)
                 file_stream = io.BytesIO()
                 downloader = MediaIoBaseDownload(file_stream, request)
                 done = False
-                
+
                 while not done:
                     status, done = downloader.next_chunk()
-                
+
                 file_stream.seek(0)
-                
-                # Try to extract using python-docx
-                try:  
+
+                try:
                     from docx import Document
                     doc = Document(file_stream)
                     content = "\n".join([para.text for para in doc.paragraphs])
@@ -397,40 +476,29 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
                 except ImportError:
                     logger.warning("python-docx not available, returning generic message")
                     return "[DOCX file content - unable to extract without python-docx library]", True, "DOCX extraction limited"
-            except Exception as e:
-                logger.error(f"Failed to extract DOCX: {str(e)}")
-                return "", False, f"DOCX extraction failed:   {str(e)}"
-        
-        # Unsupported format
-        else:  
+            except Exception as e:  
+                logger.error(f"Failed to extract DOCX:  {str(e)}")
+                return "", False, f"DOCX extraction failed: {str(e)}"
+
+        else:
             logger.warning(f"Unsupported MIME type: {mime_type}")
             return "", False, f"Unsupported file format: {mime_type}"
-    
-    except Exception as e:  
+
+    except Exception as e:
         logger.error(f"Unexpected error extracting file content: {type(e).__name__} - {str(e)}")
-        return "", False, f"Unexpected error:   {str(e)}"
+        return "", False, f"Unexpected error:  {str(e)}"
 
 
-# Sidebar controls for Google Drive integration
+# Sidebar controls
 st.sidebar.title("🦁 'Remcensus")
 st.sidebar.success("✅ Protocol Discovery Active")
 st.sidebar.markdown("---")
-use_gdrive = st.sidebar.checkbox("Include Google Drive metadata in search", value=False)
-drive_id_input = st.sidebar.text_input(
-    "Google Drive ID to use:", value="10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9"
-)
-gdrive_top_k = st.sidebar.number_input(
-    "Number of drive items to include (metadata only)",
-    min_value=1,
-    max_value=20,
-    value=5,
-    step=1,
-)
+
 extract_content = st.sidebar.checkbox("Extract file content for summarization", value=True)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🛠️ Developer Mode")
-dev_mode = st.sidebar.checkbox("Enable Developer Mode", value=True)
+dev_mode = st.sidebar.checkbox("Enable Developer Mode", value=False)
 
 # SECURE CONNECTION
 if "init_done" not in st.session_state:
@@ -438,30 +506,23 @@ if "init_done" not in st.session_state:
         logger.info("Initializing Pinecone and AI clients...")
         pc = Pinecone(api_key=st.secrets["PINECONE_KEY"])
         st.session_state.pc_index = pc.Index(st.secrets["PINECONE_INDEX"])
-        st.session_state.google_client = google_genai.Client(
-            api_key=st.secrets["GEMINI_KEY"]
-        )
+        st.session_state.google_client = google_genai.Client(api_key=st.secrets["GEMINI_KEY"])
         st.session_state.groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        st.session_state.hf_client = InferenceClient(
-            api_key=st.secrets["HUGGINGFACE_KEY"]
-        )
+        st.session_state.hf_client = InferenceClient(api_key=st.secrets["HUGGINGFACE_KEY"])
         logger.info("Pinecone and AI clients initialized successfully")
 
-        # Initialize Google Drive service
         logger.info("Initializing Google Drive service...")
         st.session_state.drive_service = initialize_drive_service()
 
         if st.session_state.drive_service:  
             logger.info("Drive service initialized successfully")
         else:
-            logger.warning(
-                "Drive service initialization returned None - Drive features will be unavailable"
-            )
+            logger.warning("Drive service initialization returned None")
 
         st.session_state.init_done = True
         logger.info("Session initialization completed")
 
-    except Exception as e:  
+    except Exception as e:
         logger.error(f"Security/Initialization Error: {e}", exc_info=True)
         st.error(f"🔐 Security Error: {e}")
         st.stop()
@@ -500,22 +561,21 @@ def enforce_rem_lexicon(text):
     return text
 
 
-# --- 3.  UNIVERSAL SYSTEM PROMPT (REINFORCED) ---
+# --- 3.UNIVERSAL SYSTEM PROMPT ---
 SYSTEM_PROMPT = (
     "You are a neutral information retrieval system for the 'Remier League archives.\n\n"
     "Provide only factual, direct answers based on the context provided.\n"
     "Do not add narrative descriptions, actions, or roleplay elements.\n"
     "Do not use stage directions like *pauses*, *scribbles*, etc.\n"
     "Keep responses concise and informational.\n\n"
-    "1. Do not mention Tiers or classification labels in your response.\n"
-    "2. For simple identity queries, provide only an ontological definition.    Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3. DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite:   20, 21, 37, 42, 45, 53].\n"
-    "4. CONTEXT-AWARE KILL-SWITCH: If the USER'S QUERY (not the document content) explicitly asks you to EXPLAIN, DEFINE, or TEACH what any of these terms mean, respond ONLY with 'rink and learn.\n"
-    "   - Only trigger if the query contains phrases like:  'what is BJ', 'explain TK', 'define IJ', 'how to play with BJ', etc.\n"
+    "1.Do not mention Tiers or classification labels in your response.\n"
+    "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
+    "3.DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
+    "4.CONTEXT-AWARE KILL-SWITCH: If the USER'S QUERY (not the document content) explicitly asks you to EXPLAIN, DEFINE, or TEACH what any of these terms mean, respond ONLY with 'rink and learn.\n"
+    "   - Only trigger if the query contains phrases like:   'what is BJ', 'explain TK', 'define IJ', 'how to play with BJ', etc.\n"
     "   - DO NOT trigger if you are simply READING, SUMMARIZING, or QUOTING these terms from documents.\n"
     "   - DO NOT trigger if these terms appear naturally in document content, meeting minutes, or motions.\n"
-    "   RESTRICTED QUERY TRIGGERS: 'what is BJ', 'what is TK', 'what is IJ', 'explain BJ', 'define BJ', 'how to BJ', 'BJ guide', 'TK tutorial', 'teach me BJ', etc.\n"
-    "5. Format:    Direct answers only. No narrative, actions, or roleplay."
+    "5.Format:   Direct answers only.No narrative, actions, or roleplay."
 )
 
 
@@ -545,16 +605,13 @@ def generate_response(context, query):
             )
             return response.text, "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
-            debug_logs.append(f"Gemini: {str(e_gem)}")
+            debug_logs.append(f"Gemini:  {str(e_gem)}")
             try:
                 response = st.session_state.hf_client.chat_completion(
                     model="meta-llama/Llama-3.2-3B-Instruct",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {
-                            "role": "user",
-                            "content": f"Context: {context}\n\nQuestion: {query}",
-                        },
+                        {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"},
                     ],
                     max_tokens=800,
                 )
@@ -574,15 +631,11 @@ def generate_response(context, query):
 
 # --- 5.FOLDER STRUCTURE INTELLIGENCE ---
 def match_category(query_lower, folder_map):
-    """
-    Intelligently match query to folder categories.
-    Returns tuple:   (category_name, subcategory_name or None, confidence_score)
-    """
+    """Intelligently match query to folder categories."""
     best_match = (None, None, 0)
 
-    # Check subcategories FIRST (more specific)
     for category, info in folder_map.items():
-        if "subcategories" in info: 
+        if "subcategories" in info:
             for subcat_name, subcat_info in info["subcategories"].items():
                 subcat_keywords = subcat_info.get("keywords", [])
                 for keyword in subcat_keywords:  
@@ -591,7 +644,6 @@ def match_category(query_lower, folder_map):
                         if confidence > best_match[2]:  
                             best_match = (category, subcat_name, confidence)
 
-    # Check main categories ONLY if no subcategory matched
     if best_match[2] == 0:
         for category, info in folder_map.items():
             category_keywords = info.get("keywords", [])
@@ -604,35 +656,18 @@ def match_category(query_lower, folder_map):
     return best_match
 
 
-def extract_year(folder_name):
-    """Extract year from folder name and return priority."""
-    folder_lower = folder_name.lower()
-
-    for year_pattern, priority in YEAR_PRIORITY.items():
-        if year_pattern.lower() in folder_lower:
-            return priority
-
-    return 999
-
-
-# --- 6.GOOGLE DRIVE METADATA HELPER ---
-def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
+# --- 6.GOOGLE DRIVE SEARCH WITH IMPROVED SCORING & DATE FILTERING ---
+def fetch_drive_recent_files(drive_id, search_query=None, score_threshold=SCORE_THRESHOLD):
     """
-    Fetch metadata with intelligent folder structure awareness.
-    Uses RACRL_FOLDER_MAP to understand hierarchy and prioritize results.
-    Returns ONLY files, not folders (unless explicitly requested).
+    Fetch files with intelligent scoring based on filename matches and date filtering.
     """
     drive_service = st.session_state.get("drive_service")
     if drive_service is None:
         logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError(
-            "Drive service not initialized.Ensure GDRIVE_SERVICE_ACCOUNT_JSON is set in secrets."
-        )
+        raise RuntimeError("Drive service not initialized.")
 
     try:
-        logger.info(
-            f"Fetching recent files from drive/folder {drive_id} with intelligent folder structure..."
-        )
+        logger.info(f"Fetching files from drive/folder {drive_id}")
 
         all_items = []
         folders_to_search = [drive_id]
@@ -643,7 +678,7 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
-            if current_folder in searched_folders:  
+            if current_folder in searched_folders:
                 continue
 
             searched_folders.add(current_folder)
@@ -682,181 +717,121 @@ def fetch_drive_recent_files(drive_id, top_k=5, search_query=None):
                 logger.warning(f"Error searching folder {current_folder}: {e}")
                 continue
 
-        logger.info(
-            f"Search complete:   Found {len(all_items)} files across {len(searched_folders)} folders"
-        )
-
-        # Display debug info in Streamlit UI
-        st.write(f"📊 **Folders searched:** {len(searched_folders)}")
-        st.write(f"📁 **Total files found:** {len(all_items)}")
-        st.write("**File names found:**")
-        for file_item in all_items:
-            st.write(f"  - {file_item.get('name')}")
-
-        if len(all_items) == 0:
-            logger.warning("No files found in the entire folder hierarchy!")
+        logger.info(f"Search complete:   Found {len(all_items)} files")
 
         all_items.sort(key=lambda x: x.get("modifiedTime", ""))
 
-        # NOW DETECT CATEGORY (after all_items exists)
+        # Extract date constraints from query
+        date_constraints = None
+        if search_query: 
+            date_constraints = extract_date_constraints_from_query(search_query)
+            logger.info(f"Date constraints extracted: {date_constraints}")
+        
+        # Apply date filtering
+        if date_constraints and any(date_constraints.values()):
+            all_items = apply_date_filter(all_items, date_constraints)
+            logger.info(f"After date filtering: {len(all_items)} files")
+
+        # Detect category
         category_match, subcategory_match, category_confidence = None, None, 0
         if search_query:
             category_match, subcategory_match, category_confidence = match_category(
                 search_query.lower(), RACRL_FOLDER_MAP
             )
             logger.info(
-                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}, Confidence={category_confidence:.2f}"
+                f"Query intent detected: Category={category_match}, Subcategory={subcategory_match}"
             )
 
-        # NOW SCORE AND FILTER
-        debug_info = []
+        # IMPROVED SCORING (v21)
         if search_query:
-            search_terms = [
-                term for term in search_query.lower().split() if len(term) > 2
-            ]
+            search_terms = [term for term in search_query.lower().split() if len(term) > 2]
             scored_items = []
 
-            logger.info(
-                f"Scoring {len(all_items)} files against search terms: {search_terms}"
-            )
+            logger.info(f"Scoring {len(all_items)} files with improved filename-first strategy")
 
-            for item in all_items:
+            for item in all_items:  
                 name_lower = item.get("name", "").lower()
-                desc_lower = (
-                    item.get("description", "").lower()
-                    if item.get("description")
-                    else ""
-                )
+                desc_lower = item.get("description", "").lower() if item.get("description") else ""
                 score = 0
 
-                # Base scoring on filename/description
+                # **MASSIVE BOOST FOR FILENAME MATCHES** (v21 improvement)
                 for term in search_terms:
                     if term in name_lower:  
-                        score += 3
-                    if term in desc_lower:
+                        score += 20  # Increased from 3 to 20 for filename matches
+
+                # Small boost for description matches
+                for term in search_terms:
+                    if term in desc_lower:  
                         score += 1
 
-                # Boost score if item matches detected category
+                # Category matching
                 if category_match:  
                     category_info = RACRL_FOLDER_MAP.get(category_match, {})
-                    if any(
-                        kw in name_lower for kw in category_info.get("keywords", [])
-                    ):
+                    if any(kw in name_lower for kw in category_info.get("keywords", [])):
                         score += 5
 
-                    # EXTRA boost for subcategory match
                     if subcategory_match and "subcategories" in category_info:
-                        subcat_info = category_info["subcategories"].get(
-                            subcategory_match, {}
-                        )
-                        if any(
-                            kw in name_lower for kw in subcat_info.get("keywords", [])
-                        ):
+                        subcat_info = category_info["subcategories"].get(subcategory_match, {})
+                        if any(kw in name_lower for kw in subcat_info.get("keywords", [])):
                             score += 50
 
-                scored_items.append((score, item))
-
-                # COLLECT DEBUG INFO FOR WAHA/MEETING/MINUTES FILES ONLY
-                if "waha" in name_lower or "meeting" in name_lower or "minutes" in name_lower:  
-                    debug_info.append({
-                        "filename": item.get("name"),
-                        "score": score,
-                        "category_match": category_match,
-                        "subcategory_match":   subcategory_match,
-                        "has_waha_keyword": any(kw in name_lower for kw in RACRL_FOLDER_MAP.get("Minutes", {}).get("subcategories", {}).get("WAHA", {}).get("keywords", [])),
-                        "category_keywords":   RACRL_FOLDER_MAP.get(category_match, {}).get("keywords", []) if category_match else [],
-                        "subcategory_keywords":   RACRL_FOLDER_MAP.get(category_match, {}).get("subcategories", {}).get(subcategory_match, {}).get("keywords", []) if category_match and subcategory_match else [],
-                    })
-
                 if score > 0:
+                    scored_items.append((score, item))
                     logger.debug(f"File:   {item.get('name')} - Score: {score}")
 
-            # ROBUST SORTING AND FILTERING (v18 FIX)
+            # Sort by score, then by recency
             def get_modified_timestamp(item):
-                """Convert modifiedTime to timestamp for proper sorting."""
                 try:
-                    dt = datetime.fromisoformat(
-                        item.get("modifiedTime", "1970-01-01").replace("Z", "+00:00")
-                    )
+                    dt = datetime.fromisoformat(item.get("modifiedTime", "1970-01-01").replace("Z", "+00:00"))
                     return dt.timestamp()
-                except Exception:  
+                except Exception: 
                     return 0
 
-            scored_items.sort(
-                key=lambda x: (-x[0], -get_modified_timestamp(x[1]))
+            scored_items.sort(key=lambda x: (-x[0], -get_modified_timestamp(x[1])))
+
+            # **THRESHOLD-BASED FILTERING** (v21 improvement - replaces fixed top_k)
+            items = [item for score, item in scored_items if score >= score_threshold]
+
+            logger.info(
+                f"Files meeting threshold ({score_threshold}): {len(items)} files selected"
             )
 
-            # Filter to ONLY items with score > 0, then take top_k
-            items = [item for score, item in scored_items if score > 0][: top_k]
+            if not items:
+                logger.warning(f"No items met threshold of {score_threshold}, returning top 3 by score")
+                items = [item for score, item in scored_items[:3]]
 
-            # If no items scored > 0, fall back to top by recency
-            if not items:  
-                logger.warning("No items matched search criteria, returning top by recency")
-                all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
-                items = all_items[:top_k]
-                logger.info(f"Fallback:  Returning top {len(items)} files by recency")
-            else:
-                logger.info(f"Top {len(items)} files after intelligent scoring (filtered for score > 0)")
-
-            # Display WAHA scoring debug info in Streamlit
-            if debug_info:
-                st.write("### 🔍 WAHA/MEETING/MINUTES FILE SCORING DEBUG")
-                for info in debug_info:
-                    st.write(f"**{info['filename']}**")
-                    st.write(f"  - **Score:** {info['score']}")
-                    st.write(f"  - **Category Match:** {info['category_match']}")
-                    st.write(f"  - **Subcategory Match:** {info['subcategory_match']}")
-                    st.write(f"  - **Has WAHA Keyword:** {info['has_waha_keyword']}")
-                    st.write(f"  - **Category Keywords:** {info['category_keywords']}")
-                    st.write(f"  - **Subcategory Keywords:** {info['subcategory_keywords']}")
-                    st.write("---")
-        else:
-            items = all_items[:top_k]
-            logger.debug(
-                f"Returning top {len(items)} most recent items (no search query)"
-            )
+        else:  
+            all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+            items = all_items[:5]
 
         # Normalize datetime strings
-        for item in items:
+        for item in items:  
             if "createdTime" in item:
                 try:
-                    dt = datetime.fromisoformat(
-                        item["createdTime"].replace("Z", "+00:00")
-                    )
+                    dt = datetime.fromisoformat(item["createdTime"].replace("Z", "+00:00"))
                     item["createdTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['createdTime']}:   {dt_e}"
-                    )
+                    logger.warning(f"Failed to parse datetime {item['createdTime']}: {dt_e}")
                     item["createdTimeISO"] = item.get("createdTime")
 
             if "modifiedTime" in item:
-                try:  
-                    dt = datetime.fromisoformat(
-                        item["modifiedTime"].replace("Z", "+00:00")
-                    )
+                try: 
+                    dt = datetime.fromisoformat(item["modifiedTime"].replace("Z", "+00:00"))
                     item["modifiedTimeISO"] = dt.isoformat()
                 except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['modifiedTime']}: {dt_e}"
-                    )
+                    logger.warning(f"Failed to parse datetime {item['modifiedTime']}:   {dt_e}")
                     item["modifiedTimeISO"] = item.get("modifiedTime")
 
         return items
 
     except HttpError as e:
-        logger.error(
-            f"HTTP error fetching drive items: {e.resp.status} - {e.content}"
-        )
+        logger.error(f"HTTP error fetching drive items: {e.resp.status}")
         raise
     except GoogleAPICallError as e:
         logger.error(f"Google API error fetching drive items: {str(e)}")
         raise
-    except Exception as e:
-        logger.error(
-            f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}",
-            exc_info=True,
-        )
+    except Exception as e: 
+        logger.error(f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}", exc_info=True)
         raise
 
 
@@ -865,39 +840,22 @@ query = st.text_input("Enter Query Parameters:", placeholder="Search the archive
 
 if query:
     with st.spinner("🌀 Triage in progress..."):
-        # Initialize search process tracking
         search_process = {
             "query": query,
             "timestamp": datetime.now().isoformat(),
-            "use_gdrive": use_gdrive,
-            "drive_id": drive_id_input,
-            "gdrive_top_k": gdrive_top_k,
-            "extract_content": extract_content,
             "category_detection": None,
+            "date_constraints": None,
             "pinecone_results": [],
             "drive_results": [],
             "extracted_content": [],
-            "context_sources": [],
             "llm_engine_used": None,
             "errors": [],
         }
 
         try:
-            logger.info(f"Processing query: {query[: 100]}...")
+            logger.info(f"Processing query: {query[:  100]}...")
 
-            # Shortcut:    if user specifically asks for the most recent file in the drive
-            q_lower = query.lower()
-            wants_most_recent = False
-            if use_gdrive and (
-                "most recent" in q_lower
-                or "latest file" in q_lower
-                or "newest file" in q_lower
-            ):
-                wants_most_recent = True
-                logger.debug("User query detected as requesting most recent file")
-                search_process["wants_most_recent"] = True
-
-            # Run embedding + pinecone retrieval
+            # Step 1: Pinecone retrieval
             logger.info("Step 1: Running Pinecone embedding and retrieval...")
             result = st.session_state.google_client.models.embed_content(
                 model="text-embedding-004", contents=query
@@ -914,288 +872,140 @@ if query:
                     {
                         "source": meta.get("source", "Unknown"),
                         "score": match.get("score", "N/A"),
-                        "content_preview": meta.get("text", "")[:100] + "...",
                     }
                 )
 
             logger.info(f"Pinecone returned {len(search_results['matches'])} results")
 
-            # If Drive metadata inclusion is enabled, fetch and append metadata to context_text
-            if use_gdrive:  
-                try:
-                    logger.info("Step 2: Fetching Google Drive metadata...")
-                    # CHECK IF DRIVE_SERVICE IS NONE BEFORE CALLING
-                    if st.session_state.drive_service is None:
-                        logger.warning(
-                            "Drive service is None - skipping Drive metadata"
-                        )
-                        st.warning(
-                            "⚠️ Drive service not initialized.Drive metadata unavailable."
-                        )
-                        search_process["errors"].append("Drive service not initialized")
-                    else:
-                        logger.info("Step 2a: Detecting category intent from query...")
-                        category_match, subcategory_match, category_confidence = (
-                            match_category(query.lower(), RACRL_FOLDER_MAP)
-                        )
-                        search_process["category_detection"] = {
-                            "category":   category_match,
-                            "subcategory": subcategory_match,
-                            "confidence":   category_confidence,
-                        }
-                        logger.info(
-                            f"Category detected: {category_match} > {subcategory_match} (confidence: {category_confidence:.2f})"
-                        )
+            # Step 2: Google Drive search (background, with date filtering)
+            logger.info("Step 2: Fetching from Google Drive (background)...")
+            try:
+                if st.session_state.drive_service is None:
+                    logger.warning("Drive service is None - skipping Drive search")
+                    search_process["errors"].append("Drive service not initialized")
+                else:
+                    logger.info("Extracting date constraints from query...")
+                    date_constraints = extract_date_constraints_from_query(query)
+                    search_process["date_constraints"] = {
+                        k: str(v) if isinstance(v, datetime) else v 
+                        for k, v in date_constraints.items()
+                    }
 
-                        logger.info("Step 2b: Recursively searching Drive folders...")
-                        drive_files = fetch_drive_recent_files(
-                            drive_id_input, top_k=gdrive_top_k, search_query=query
-                        )
-
-                        # ADD THIS DEBUG OUTPUT
-                        st.write("🔍 DEBUG INFO:")
-                        st.write(
-                            f"Number of files returned:   {len(drive_files) if drive_files else 0}"
-                        )
-                        if drive_files:
-                            st.write("Files found:")
-                            for f in drive_files:
-                                st.write(f"  - {f.get('name')} ({f.get('mimeType')})")
-
-                        if drive_files:
-                            logger.info(
-                                f"Step 2c: Retrieved {len(drive_files)} files from Drive"
-                            )
-
-                            for idx, f in enumerate(drive_files):
-                                search_process["drive_results"].append(
-                                    {
-                                        "rank": idx + 1,
-                                        "name": f.get("name"),
-                                        "mime_type": f.get("mimeType"),
-                                        "created":   f.get("createdTimeISO"),
-                                        "modified": f.get("modifiedTimeISO"),
-                                        "link": f.get("webViewLink"),
-                                    }
-                                )
-
-                            # If the user directly asked for the most recent file, show it immediately
-                            if wants_most_recent:
-                                most_recent = drive_files[0]
-                                created = most_recent.get(
-                                    "createdTimeISO",
-                                    most_recent.get("createdTime", "unknown"),
-                                )
-                                name = most_recent.get("name", "Unnamed")
-                                link = most_recent.get(
-                                    "webViewLink",
-                                    "No link available (insufficient perms)",
-                                )
-                                mime = most_recent.get("mimeType", "unknown")
-
-                                logger.info(f"Displaying most recent file: {name}")
-                                st.success(
-                                    "Most recent file in the Drive (by relevance & recency):"
-                                )
-                                st.write(f"- Name: **{name}**")
-                                st.write(f"- Created: {created}")
-                                st.write(f"- Type: {mime}")
-                                st.write(f"- Link: {link}")
-
-                            # Extract content from ONLY THE FIRST (most recent) file if enabled
-                            if extract_content and len(drive_files) > 0:
-                                logger.info("Step 2d: Extracting content from the most recent file...")
-                                st.write("### 📄 Extracting file content from most recent file...")
-                                
-                                # Get the first (most recent) file
-                                first_file = drive_files[0]
-                                file_id = first_file.get("id")
-                                file_name = first_file.get("name")
-                                mime_type = first_file.get("mimeType")
-
-                                logger.info(f"Extracting content from:   {file_name}")
-                                content, success, error = extract_file_content(
-                                    st.session_state.drive_service,
-                                    file_id,
-                                    mime_type,
-                                    file_name,
-                                )
-
-                                if success:  
-                                    st.write(f"✅ Extracted:   {file_name}")
-                                    search_process["extracted_content"].append({
-                                        "filename": file_name,
-                                        "mime_type": mime_type,
-                                        "content_preview": content[:200] + "...",
-                                        "content_length": len(content),
-                                    })
-                                    # Add extracted content to context (limit to first 10000 chars)
-                                    context_text += f"\n\n--- Content from {file_name} ---\n{content[:10000]}\n"
-                                else:
-                                    st.write(f"⚠️ Failed to extract:   {file_name} - {error}")
-                                    search_process["errors"].append(
-                                        f"Content extraction failed for {file_name}:  {error}"
-                                    )
-
-                            # Append drive metadata into context so LLMs can reference it
-                            context_text += (
-                                "\n---\nGoogle Drive Metadata (most relevant items):\n"
-                            )
-                            for f in drive_files:
-                                owners = (
-                                    ", ".join(
-                                        [
-                                            o.get(
-                                                "displayName",
-                                                o.get("emailAddress", "unknown"),
-                                            )
-                                            for o in f.get("owners", [])
-                                        ]
-                                    )
-                                    if f.get("owners")
-                                    else "unknown"
-                                )
-                                context_text += f"Name: {f.get('name')}\nCreated: {f.get('createdTimeISO')}\nOwners: {owners}\nLink: {f.get('webViewLink', '')}\nMime: {f.get('mimeType')}\n\n"
-                                logger.debug(f"Added to context: {f.get('name')}")
-                        else:
-                            st.info(
-                                "No files returned from the specified Drive (or insufficient permissions)."
-                            )
-                            logger.warning(
-                                f"No files returned from drive {drive_id_input}"
-                            )
-                            search_process["errors"].append(
-                                "No files returned from Drive"
-                            )
-
-                except Exception as e_drive:
-                    logger.error(
-                        f"Google Drive metadata fetch failed: {type(e_drive).__name__} - {str(e_drive)}",
-                        exc_info=True,
+                    logger.info("Detecting category intent from query...")
+                    category_match, subcategory_match, category_confidence = match_category(
+                        query.lower(), RACRL_FOLDER_MAP
                     )
-                    search_process["errors"].append(
-                        f"Drive fetch error: {type(e_drive).__name__} - {str(e_drive)}"
+                    search_process["category_detection"] = {
+                        "category": category_match,
+                        "subcategory": subcategory_match,
+                        "confidence": category_confidence,
+                    }
+
+                    logger.info("Searching Drive with threshold-based filtering and date constraints...")
+                    drive_files = fetch_drive_recent_files(
+                        "10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9",
+                        search_query=query,
+                        score_threshold=SCORE_THRESHOLD,
                     )
 
-                    error_msg = f"❌ Google Drive metadata fetch failed: {str(e_drive)}"
-                    st.error(error_msg)
+                    logger.info(f"Found {len(drive_files)} files")
 
-                    # Developer mode error report
-                    if dev_mode:
-                        with st.expander("🔴 DEVELOPER ERROR REPORT - DRIVE FETCH"):
-                            st.markdown("### Error Details")
-                            st.write(f"**Error Type:** `{type(e_drive).__name__}`")
-                            st.write(f"**Error Message:** {str(e_drive)}")
-                            st.write(f"**Drive ID:** `{drive_id_input}`")
-                            st.write(f"**Query:** `{query}`")
-                            st.write(f"**Search Query Enabled:** {use_gdrive}")
-                            st.write(f"**Top-K:** {gdrive_top_k}")
+                    if drive_files:  
+                        for idx, f in enumerate(drive_files):
+                            search_process["drive_results"].append(
+                                {
+                                    "rank": idx + 1,
+                                    "name": f.get("name"),
+                                    "mime_type": f.get("mimeType"),
+                                    "modified":  f.get("modifiedTimeISO"),
+                                }
+                            )
 
-                            # Show stack trace
-                            st.markdown("### Stack Trace")
-                            st.code(traceback.format_exc())
+                        # Extract content from first file if enabled
+                        if extract_content and len(drive_files) > 0:
+                            logger.info("Extracting content from first file...")
 
+                            first_file = drive_files[0]
+                            file_id = first_file.get("id")
+                            file_name = first_file.get("name")
+                            mime_type = first_file.get("mimeType")
+
+                            content, success, error = extract_file_content(
+                                st.session_state.drive_service,
+                                file_id,
+                                mime_type,
+                                file_name,
+                            )
+
+                            if success:
+                                logger.info(f"Successfully extracted {file_name}")
+                                search_process["extracted_content"].append({
+                                    "filename": file_name,
+                                    "mime_type": mime_type,
+                                    "content_length": len(content),
+                                })
+                                context_text += f"\n\n--- Content from {file_name} ---\n{content[:  10000]}\n"
+                            else:
+                                logger.error(f"Failed to extract {file_name}: {error}")
+                                search_process["errors"].append(f"Content extraction failed: {error}")
+
+                        # Add metadata (hidden from UI but in context)
+                        context_text += "\n---\nGoogle Drive Files Found:\n"
+                        for f in drive_files:
+                            context_text += f"- {f.get('name')} (Modified: {f.get('modifiedTimeISO')})\n"
+
+                    else:  
+                        logger.warning("No files found in Drive search")
+                        search_process["errors"].append("No files found in Drive search")
+
+            except Exception as e_drive:
+                logger.error(f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}")
+                search_process["errors"].append(f"Drive search error: {str(e_drive)}")
+
+            # Step 3: Generate response
             logger.info("Step 3: Generating response from LLM...")
             raw_text, engine_used, logs = generate_response(context_text, query)
             search_process["llm_engine_used"] = engine_used
             final_answer = enforce_rem_lexicon(raw_text)
-            st.caption(f"Generated via: {engine_used}")
+
             st.info(final_answer)
+            st.caption(f"Generated via:  {engine_used}")
 
-            if engine_used == "OFFLINE":
-                with st.expander("🛠 Diagnostic Logs"):
-                    for log in logs:
-                        st.code(log)
+            logger.info(f"Query processing completed.Engine:   {engine_used}")
 
-            logger.info(f"Step 4: Query processing completed.Engine:   {engine_used}")
+            # Developer mode only
+            if dev_mode:
+                with st.expander("🔍 DEVELOPER MODE - Search Analysis"):
+                    st.markdown("### Search Process")
+                    st.write(f"**Query:** {search_process['query']}")
+                    st.write(f"**Timestamp:** {search_process['timestamp']}")
 
-            # Always show developer mode search process details
-            if dev_mode:  
-                with st.expander("🔍 DEVELOPER MODE - SEARCH PROCESS ANALYSIS"):
-                    st.markdown("### Search Process Timeline")
+                    if search_process["date_constraints"]:
+                        st.write("**Date Constraints:**")
+                        for key, value in search_process["date_constraints"].items():
+                            if value: 
+                                st.write(f"  - {key}: {value}")
 
-                    # Query information
-                    st.markdown("#### 1️⃣ Query Information")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Query:** `{search_process['query']}`")
-                        st.write(f"**Timestamp:** {search_process['timestamp']}")
-                    with col2:
-                        st.write(
-                            f"**Drive Search Enabled:** {search_process['use_gdrive']}"
-                        )
-                        st.write(f"**Extract Content:** {search_process['extract_content']}")
-
-                    # Category detection
                     if search_process["category_detection"]:
-                        st.markdown("#### 2️⃣ Category Detection")
-                        cat_det = search_process["category_detection"]
-                        st.write(f"**Primary Category:** {cat_det['category']}")
-                        st.write(f"**Subcategory:** {cat_det['subcategory'] or 'None'}")
-                        st.write(
-                            f"**Detection Confidence:** {cat_det['confidence']:.2%}"
-                        )
+                        st.write(f"**Category Detected:** {search_process['category_detection']['category']}")
+                        st.write(f"**Subcategory:** {search_process['category_detection']['subcategory']}")
 
-                    # Pinecone results
-                    if search_process["pinecone_results"]: 
-                        st.markdown("#### 3️⃣ Pinecone Vector Search Results")
-                        for idx, result in enumerate(
-                            search_process["pinecone_results"], 1
-                        ):
-                            with st.container():
-                                st.write(f"**Result {idx}**")
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.write(f"Source: `{result['source']}`")
-                                    st.write(f"Preview: {result['content_preview']}")
-                                with col2:
-                                    st.write(f"Score: {result['score']}")
-
-                    # Drive results
                     if search_process["drive_results"]:
-                        st.markdown(
-                            "#### 4️⃣ Google Drive Search Results (Ranked by Algorithm)"
-                        )
+                        st.markdown("#### Files Found")
                         for result in search_process["drive_results"]:
-                            with st.container():
-                                st.write(f"**#{result['rank']}** - {result['name']}")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.write(f"Type: `{result['mime_type']}`")
-                                    st.write(f"Created: {result['created']}")
-                                with col2:
-                                    st.write(f"Modified: {result['modified']}")
-                                st.write(f"Link: {result['link']}")
+                            st.write(f"- **{result['name']}** ({result['mime_type']}, Modified: {result.get('modified', 'N/A')})")
 
-                    # Extracted content
                     if search_process["extracted_content"]:
-                        st.markdown("#### 4️⃣ Extracted File Content (Most Recent Only)")
+                        st.markdown("#### Extracted Content")
                         for content in search_process["extracted_content"]:
-                            with st.container():
-                                st.write(f"**{content['filename']}**")
-                                st.write(f"  - Type: `{content['mime_type']}`")
-                                st.write(f"  - Length: {content['content_length']} characters")
-                                st.write(f"  - Preview: {content['content_preview']}")
+                            st.write(f"- **{content['filename']}** ({content['content_length']} chars)")
 
-                    # LLM Engine
-                    st.markdown("#### 5️⃣ LLM Processing")
-                    st.write(f"**Engine Used:** {search_process['llm_engine_used']}")
-                    st.write(
-                        f"**Context Sources Combined:** {len(search_process['pinecone_results']) + len(search_process['drive_results'])} files"
-                    )
-
-                    # Errors (if any)
                     if search_process["errors"]:
-                        st.markdown("#### ⚠️ Errors Encountered")
-                        for error in search_process["errors"]:  
+                        st.markdown("#### Errors")
+                        for error in search_process["errors"]:
                             st.error(error)
-                    else:
-                        st.success(
-                            "✅ No errors encountered during search process"
-                        )
 
-                    # Export button for debugging
-                    st.markdown("#### 📊 Export Search Data")
+                    st.markdown("#### Export Data")
                     search_json = json.dumps(search_process, indent=2)
                     st.download_button(
                         label="📥 Download Search Process JSON",
@@ -1205,51 +1015,15 @@ if query:
                     )
 
         except Exception as e:
-            logger.error(
-                f"Critical error processing query: {type(e).__name__} - {str(e)}",
-                exc_info=True,
-            )
-            search_process["errors"].append(
-                f"Critical error: {type(e).__name__} - {str(e)}"
-            )
+            logger.error(f"Critical error:   {type(e).__name__} - {str(e)}", exc_info=True)
+            search_process["errors"].append(f"Critical error: {str(e)}")
 
-            error_msg = f"⚠️ Critical Error: {e}"
-            st.error(error_msg)
+            st.error(f"⚠️ Error processing query: {str(e)}")
 
-            # Developer mode error report
             if dev_mode:
-                with st.expander("🔴 DEVELOPER ERROR REPORT - CRITICAL"):
-                    st.markdown("### Critical Error Details")
-                    st.write(f"**Error Type:** `{type(e).__name__}`")
-                    st.write(f"**Error Message:** {str(e)}")
-                    st.write(f"**Query:** `{query}`")
-                    st.write(f"**Drive Metadata Enabled:** {use_gdrive}")
-                    st.write(f"**Extract Content:** {extract_content}")
-
-                    # Show all relevant session state
-                    st.markdown("### Session State")
-                    st.write(
-                        f"**Drive Service Initialized:** {st.session_state.drive_service is not None}"
-                    )
-                    st.write(
-                        f"**Pinecone Index Ready:** {hasattr(st.session_state, 'pc_index')}"
-                    )
-                    st.write(
-                        f"**Google Client Ready:** {hasattr(st.session_state, 'google_client')}"
-                    )
-                    st.write(
-                        f"**Groq Client Ready:** {hasattr(st.session_state, 'groq_client')}"
-                    )
-                    st.write(
-                        f"**HuggingFace Client Ready:** {hasattr(st.session_state, 'hf_client')}"
-                    )
-
-                    # Show stack trace
-                    st.markdown("### Stack Trace")
+                with st.expander("🔴 Error Details"):
+                    st.write(f"**Error Type:** {type(e).__name__}")
+                    st.write(f"**Message:** {str(e)}")
                     st.code(traceback.format_exc())
-
-                    # Show search process so far
-                    st.markdown("### Search Process Before Error")
-                    st.json(search_process)
 
 logger.info("Application render completed")
