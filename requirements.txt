@@ -7,3 +7,4 @@ google-api-python-client
 google-auth
 PyPDF2==3.0.1
 python-docx==0.8.11
+python-dateutil==2.8.2
