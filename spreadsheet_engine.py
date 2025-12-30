@@ -210,27 +210,39 @@ class SimilarityMatcher:
     @staticmethod
     def word_match(query: str, target: str) -> float:
         """Match based on individual words - strict word-level similarity"""
+        # Common stopwords to ignore in matching
+        stopwords = {
+            "the", "a", "an", "and", "or", "but", "of", "in", "is", "it", 
+            "to", "for", "on", "at", "by", "as", "be",
+            "no", "out", "up", "all", "any"
+        }
+    
         query_words = set(re.findall(r"\b\w+\b", TextProcessor.normalize(query)))
         target_words = set(re.findall(r"\b\w+\b", TextProcessor.normalize(target)))
     
-        if not query_words or not target_words:
-            return 0.0
+        # Remove stopwords from both sets
+        query_words_filtered = query_words - stopwords
+        target_words_filtered = target_words - stopwords
     
-        # All query words must be in target
-        if query_words.issubset(target_words):
+        # If query has no meaningful words after filtering, fall back to exact match
+        if not query_words_filtered or not target_words_filtered:
+            return SimilarityMatcher.exact_match(query, target)
+    
+        # All query words must be in target (after filtering)
+        if query_words_filtered.issubset(target_words_filtered):
             return 1.0  # Exact word match
     
         # Check if any query words fuzzy-match target words
         matched_words = 0
-        for q_word in query_words: 
-            for t_word in target_words: 
+        for q_word in query_words_filtered:  
+            for t_word in target_words_filtered:  
                 word_similarity = SequenceMatcher(None, q_word, t_word).ratio()
-                if word_similarity >= 0.75:  # 75% word similarity
+                if word_similarity >= 0.70:  # LOWERED from 0.75 to 0.70
                     matched_words += 1
                     break
     
         # Return percentage of query words that matched
-        return matched_words / len(query_words) if query_words else 0.0
+        return matched_words / len(query_words_filtered) if query_words_filtered else 0.0
 
     @staticmethod
     def pattern_match(query: str, target: str) -> float:
