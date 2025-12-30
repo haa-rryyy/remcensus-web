@@ -873,13 +873,18 @@ if query:
             "query": query,
             "timestamp": datetime.now().isoformat(),
             "category_detection": None,
-            "date_constraints":  None,
+            "date_constraints": None,
             "pinecone_results": [],
             "drive_results": [],
             "extracted_content": [],
             "llm_engine_used": None,
             "errors": [],
         }
+
+        # Clear any stale session cache
+        if "last_query" in st.session_state and st.session_state. last_query == query:
+            logger.info("Query cache detected - forcing refresh...")
+        st.session_state.last_query = query
 
         try:
             logger.info(f"Processing query: {query[: 100]}...")
