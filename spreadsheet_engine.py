@@ -142,14 +142,14 @@ class TextProcessor:
 # ============================================================================
 
 
-class SimilarityMatcher:
+class SimilarityMatcher: 
     """Handles various matching strategies"""
 
-    # Thresholds for different strategies
-    FUZZY_THRESHOLD = 0.80
-    LEVENSHTEIN_THRESHOLD = 0.75
-    KEYWORD_THRESHOLD = 0.5
-    PATTERN_THRESHOLD = 0.65
+    # Thresholds for different strategies - LOWERED to allow more matches
+    FUZZY_THRESHOLD = 0.50  # Changed from 0.80
+    LEVENSHTEIN_THRESHOLD = 0.50  # Changed from 0.75
+    KEYWORD_THRESHOLD = 0.30  # Changed from 0.5
+    PATTERN_THRESHOLD = 0.50  # Changed from 0.65
 
     @staticmethod
     def exact_match(query: str, target: str) -> float:
