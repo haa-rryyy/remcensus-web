@@ -6,6 +6,14 @@ from enum import Enum
 import re
 from difflib import SequenceMatcher
 import logging
+from nltk.stem import PorterStemmer
+import nltk
+
+# Download required NLTK data (do this once)
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    nltk.download("punkt")
 
 try:
     import Levenshtein
@@ -65,22 +73,35 @@ class RelationalLookupResult:
 class TextProcessor:
     """Handles text normalization and cleaning"""
 
+    # Initialize stemmer
+    stemmer = PorterStemmer()
+
     @staticmethod
     def normalize(text: str) -> str:
         """Normalize text for comparison"""
         if not isinstance(text, str):
             return ""
-        # Convert to lowercase FIRST
+        # Convert to lowercase, strip whitespace
         text = text.lower().strip()
-        # Handle smart quotes
-        text = text.replace(''', "'").replace(''', "'")
-        # Handle OCR artifacts: BJ=4, IJ=10, TK=8
-        text = text.replace('bj', '4').replace('ij', '10').replace('tk', '8')
+        # Handle common OCR artifacts
+        text = text.replace(""", "'").replace(""", "'")  # Smart quotes
+        text = (
+            text.replace("bj", "4").replace("ij", "10").replace("tk", "8")
+        )  # Custom replacements: BJ=4, IJ=10, TK=8
         return text
 
     @staticmethod
+    def stem_text(text: str) -> str:
+        """Stem text to root words for better matching"""
+        text = TextProcessor.normalize(text)
+        # Split into words, stem each, rejoin
+        words = re.findall(r"\b\w+\b", text)
+        stemmed = [TextProcessor.stemmer.stem(word) for word in words]
+        return " ".join(stemmed)
+
+    @staticmethod
     def extract_keywords(text: str) -> set:
-        """Extract words from text"""
+        """Extract words from text (now uses stemming)"""
         text = TextProcessor.normalize(text)
         # Remove common words
         stopwords = {
@@ -98,16 +119,21 @@ class TextProcessor:
             "for",
         }
         words = set(re.findall(r"\b\w+\b", text)) - stopwords
-        return words
+        # Stem the words
+        stemmed_words = {TextProcessor.stemmer.stem(word) for word in words}
+        return stemmed_words
 
     @staticmethod
     def extract_pattern(text: str) -> Optional[Tuple[str, str]]:
-        """Extract [Adjective] [Noun] pattern"""
+        """Extract [Adjective] [Noun] pattern (now uses stemming)"""
         text = TextProcessor.normalize(text)
-        # Pattern: Capitalized words separated by space or dash
+        # Pattern:  Capitalized words separated by space or dash
         parts = re.split(r"[\s\-]+", text)
         if len(parts) >= 2:
-            return (parts[0], " ".join(parts[1:]))
+            # Stem both parts
+            adj_stemmed = TextProcessor.stemmer.stem(parts[0])
+            noun_stemmed = TextProcessor.stemmer.stem(" ".join(parts[1:]))
+            return (adj_stemmed, noun_stemmed)
         return None
 
 
@@ -484,3 +510,22 @@ class SpreadsheetEngine:
         if row_index < 0 or row_index >= len(self.df):
             return {}
         return self.df.iloc[row_index].to_dict()
+
+    def get_safe_value(
+        self, row_data: Dict, column_variants: List[str], default: str = "N/A"
+    ) -> str:
+        """
+        Safely get a value from row_data, trying multiple column name variants.
+
+        Args:
+            row_data: The row dictionary
+            column_variants: List of possible column names to try
+            default: Default value if none found
+
+        Returns:
+            The value if found, otherwise default
+        """
+        for col in column_variants:
+            if col in row_data and row_data[col] not in [None, "", "nan"]:
+                return str(row_data[col])
+        return default
