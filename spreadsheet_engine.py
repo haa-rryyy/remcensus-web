@@ -145,11 +145,11 @@ class TextProcessor:
 class SimilarityMatcher: 
     """Handles various matching strategies"""
 
-    # Thresholds for different strategies - LOWERED to allow more matches
-    FUZZY_THRESHOLD = 0.50  # Changed from 0.80
-    LEVENSHTEIN_THRESHOLD = 0.50  # Changed from 0.75
-    KEYWORD_THRESHOLD = 0.30  # Changed from 0.5
-    PATTERN_THRESHOLD = 0.50  # Changed from 0.65
+    # Thresholds for different strategies
+    FUZZY_THRESHOLD = 0.50
+    LEVENSHTEIN_THRESHOLD = 0.60
+    KEYWORD_THRESHOLD = 0.40
+    PATTERN_THRESHOLD = 0.60
 
     @staticmethod
     def exact_match(query: str, target: str) -> float:
@@ -241,11 +241,28 @@ class SimilarityMatcher:
                 query, target
             )
 
-        # Return highest score and corresponding strategy
+        # Strategy priority: EXACT > FUZZY > LEVENSHTEIN > KEYWORD > PATTERN
+        # Return the best non-zero score, prioritizing exact matches
+        if scores[MatchStrategy.EXACT] > 0:
+            return scores[MatchStrategy.EXACT], MatchStrategy.EXACT
+    
+        if scores[MatchStrategy. FUZZY] > 0:
+            return scores[MatchStrategy.FUZZY], MatchStrategy.FUZZY
+    
+        if LEVENSHTEIN_AVAILABLE and scores[MatchStrategy.LEVENSHTEIN] > 0:
+            return scores[MatchStrategy.LEVENSHTEIN], MatchStrategy.LEVENSHTEIN
+    
+        if scores[MatchStrategy.KEYWORD] > 0:
+            return scores[MatchStrategy.KEYWORD], MatchStrategy.KEYWORD
+    
+        if scores[MatchStrategy.PATTERN] > 0:
+            return scores[MatchStrategy.PATTERN], MatchStrategy.PATTERN
+
+        # Return highest score even if it's 0
         best_strategy = max(scores, key=scores.get)
         best_score = scores[best_strategy]
 
-        return best_score, best_strategy
+        return best_score, best_strategy    
 
 
 # ============================================================================
