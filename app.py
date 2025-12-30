@@ -580,51 +580,79 @@ SYSTEM_PROMPT = (
 )
 
 
-# --- 4.TRIPLE-ENGINE HANDLER ---
+# --- 4.  TRIPLE-ENGINE HANDLER WITH IMPROVED FORMATTING ---
 def generate_response(context, query):
+    """Generate response optimized for FREE tier services."""
     debug_logs = []
+    
+    # Detect if this is a summary request
+    is_summary_request = any(word in query.lower() for word in ['summar', 'outline', 'overview', 'recap'])
+    
+    # Adjust system prompt based on request type
+    if is_summary_request:
+        system_prompt = (
+            SYSTEM_PROMPT + "\n\n"
+            "SUMMARY FORMAT:  Provide a concise summary with bullet points. Keep brief."
+        )
+    else:
+        system_prompt = SYSTEM_PROMPT
+    
     try:
+        # Try Groq first (free tier available)
+        logger.info("Attempting Groq (Llama 3.3)...")
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context:\n{context}\n\nQuestion:  {query}"},
             ],
             model="llama-3.3-70b-versatile",
+            temperature=0.7,
+            max_tokens=800,  # Keep at 800 for free tier
         )
         return (
-            chat_completion.choices[0].message.content,
+            chat_completion.choices[0].message.content.strip(),
             "Groq (Llama 3.3)",
             debug_logs,
         )
-    except Exception as e:  
-        debug_logs.append(f"Groq:   {str(e)}")
+    except Exception as e: 
+        debug_logs.append(f"Groq:  {str(e)}")
+        logger.warning(f"Groq failed: {str(e)}")
+        
         try:
+            # Try Gemini second (free tier available)
+            logger.info("Attempting Gemini (1.5 Flash)...")
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=f"Context: {context}\n\nQuestion: {query}",
-                config={"system_instruction": SYSTEM_PROMPT},
+                contents=f"Context:\n{context}\n\nQuestion: {query}",
+                config={"system_instruction": system_prompt},
             )
-            return response.text, "Gemini (1.5 Flash)", debug_logs
+            return response.text.strip(), "Gemini (1.5 Flash)", debug_logs
         except Exception as e_gem:
-            debug_logs.append(f"Gemini:  {str(e_gem)}")
+            debug_logs.append(f"Gemini: {str(e_gem)}")
+            logger.warning(f"Gemini failed: {str(e_gem)}")
+            
             try:
+                # Try HuggingFace last (FREE 3B model)
+                logger.info("Attempting HuggingFace (Llama 3.2 - FREE)...")
                 response = st.session_state.hf_client.chat_completion(
-                    model="meta-llama/Llama-3.2-3B-Instruct",
+                    model="meta-llama/Llama-3.2-3B-Instruct",  # SMALLER = FREE
                     messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"},
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"},
                     ],
-                    max_tokens=800,
+                    max_tokens=800,  # Standard size
+                    temperature=0.7,
                 )
                 return (
-                    response.choices[0].message.content,
-                    "Hugging Face (Llama 3.2)",
+                    response.choices[0].message.content.strip(),
+                    "HuggingFace (Llama 3.2 3B - FREE)",
                     debug_logs,
                 )
             except Exception as e_hf:
                 debug_logs.append(f"HF: {str(e_hf)}")
+                logger.error(f"All engines failed")
                 return (
-                    "⚠️ SYSTEM FAILURE: All protocols failed.",
+                    "⚠️ SYSTEM FAILURE:  Unable to process your query.",
                     "OFFLINE",
                     debug_logs,
                 )
