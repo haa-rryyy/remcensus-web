@@ -1335,7 +1335,7 @@ if engine is not None:
 
                 for i, result in enumerate(results):
                     with st.expander(
-                        f"#{i+1} - {result. value} (Score: {result.score:.1%})",
+                        f"#{i+1} - {result.value} (Score: {result.score:.1%})",
                         expanded=(i == 0),
                     ):
                         col1, col2, col3, col4 = st.columns(4)
@@ -1390,7 +1390,7 @@ if engine is not None:
 
         lookup_query = st.text_input(
             "Enter full name:",
-            placeholder="e. g., 'Harry Foley'",
+            placeholder="e.g., 'Harry Foley'",
             key="fullname_lookup_query",
         )
 
@@ -1408,7 +1408,7 @@ if engine is not None:
                     ):
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
-                            st.metric("Match Score", f"{result.score:. 1%}")
+                            st.metric("Match Score", f"{result.score:.1%}")
                         with col2:
                             st.metric("Strategy", result.strategy.value.title())
                         with col3:
