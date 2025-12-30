@@ -322,20 +322,18 @@ class SpreadsheetEngine:
         self,
         query: str,
         search_column: Optional[str] = None,
-        top_k: int = 5,
-        min_score: float = 0.0,
+        min_score: float = 0.50,
     ) -> List[MatchResult]:
         """
         Search for a value in the spreadsheet
 
         Args:
             query: The value to search for
-            search_column: Specific column to search in (None = all columns)
-            top_k: Number of top results to return
-            min_score: Minimum score threshold (0-1)
+            search_column:  Specific column to search in (None = all columns)
+            min_score: Minimum similarity threshold (0-1). Default 0.50 (50%)
 
         Returns:
-            List of MatchResult objects, sorted by score
+            List of MatchResult objects, sorted by score (highest first)
         """
 
         results = []
@@ -361,7 +359,8 @@ class SpreadsheetEngine:
                 # Try semantic match
                 score, strategy = SimilarityMatcher.semantic_match(query, value_str)
 
-                if score > min_score:
+                # Only include results above the threshold
+                if score >= min_score:
                     results.append(
                         MatchResult(
                             value=value_str,
@@ -372,9 +371,9 @@ class SpreadsheetEngine:
                         )
                     )
 
-        # Sort by score and return top K
+        # Sort by score (highest first)
         results.sort()
-        return results[:top_k]
+        return results  # Return ALL results above threshold
 
     def lookup(
         self, query: str, source_column: str, target_column: str, fuzzy: bool = True
