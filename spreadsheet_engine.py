@@ -147,9 +147,9 @@ class SimilarityMatcher:
 
     # Thresholds for different strategies
     FUZZY_THRESHOLD = 0.50
-    LEVENSHTEIN_THRESHOLD = 0.60
-    KEYWORD_THRESHOLD = 0.40
-    PATTERN_THRESHOLD = 0.60
+    LEVENSHTEIN_THRESHOLD = 0.70
+    KEYWORD_THRESHOLD = 0.50
+    PATTERN_THRESHOLD = 0.65
 
     @staticmethod
     def exact_match(query: str, target: str) -> float:
@@ -208,6 +208,31 @@ class SimilarityMatcher:
         return similarity if similarity >= SimilarityMatcher.KEYWORD_THRESHOLD else 0.0
 
     @staticmethod
+    def word_match(query: str, target: str) -> float:
+        """Match based on individual words - strict word-level similarity"""
+        query_words = set(re.findall(r"\b\w+\b", TextProcessor.normalize(query)))
+        target_words = set(re.findall(r"\b\w+\b", TextProcessor.normalize(target)))
+    
+        if not query_words or not target_words:
+            return 0.0
+    
+        # All query words must be in target
+        if query_words.issubset(target_words):
+            return 1.0  # Exact word match
+    
+        # Check if any query words fuzzy-match target words
+        matched_words = 0
+        for q_word in query_words: 
+            for t_word in target_words: 
+                word_similarity = SequenceMatcher(None, q_word, t_word).ratio()
+                if word_similarity >= 0.75:  # 75% word similarity
+                    matched_words += 1
+                    break
+    
+        # Return percentage of query words that matched
+        return matched_words / len(query_words) if query_words else 0.0
+
+    @staticmethod
     def pattern_match(query: str, target: str) -> float:
         """Pattern-based matching (e.g., [Color] [Noun])"""
         query_pattern = TextProcessor.extract_pattern(query)
@@ -227,42 +252,29 @@ class SimilarityMatcher:
         return 0.0
 
     @staticmethod
-    def semantic_match(query: str, target: str) -> Tuple[float, MatchStrategy]:
+    def semantic_match(query: str, target: str) -> Tuple[float, MatchStrategy]:  
         """Semantic matching using multiple strategies"""
         scores = {
             MatchStrategy.EXACT: SimilarityMatcher.exact_match(query, target),
-            MatchStrategy.FUZZY: SimilarityMatcher.fuzzy_match(query, target),
-            MatchStrategy.KEYWORD: SimilarityMatcher.keyword_match(query, target),
-            MatchStrategy.PATTERN: SimilarityMatcher.pattern_match(query, target),
+            MatchStrategy.FUZZY: SimilarityMatcher.word_match(query, target),  # Use word matching
         }
 
-        if LEVENSHTEIN_AVAILABLE:
+        if LEVENSHTEIN_AVAILABLE: 
             scores[MatchStrategy.LEVENSHTEIN] = SimilarityMatcher.levenshtein_match(
                 query, target
             )
 
-        # Strategy priority: EXACT > FUZZY > LEVENSHTEIN > KEYWORD > PATTERN
-        # Return the best non-zero score, prioritizing exact matches
+        # Strategy priority:  EXACT > FUZZY > LEVENSHTEIN
         if scores[MatchStrategy.EXACT] > 0:
             return scores[MatchStrategy.EXACT], MatchStrategy.EXACT
     
-        if scores[MatchStrategy. FUZZY] > 0:
+        if scores[MatchStrategy.FUZZY] > 0:
             return scores[MatchStrategy.FUZZY], MatchStrategy.FUZZY
     
         if LEVENSHTEIN_AVAILABLE and scores[MatchStrategy.LEVENSHTEIN] > 0:
             return scores[MatchStrategy.LEVENSHTEIN], MatchStrategy.LEVENSHTEIN
-    
-        if scores[MatchStrategy.KEYWORD] > 0:
-            return scores[MatchStrategy.KEYWORD], MatchStrategy.KEYWORD
-    
-        if scores[MatchStrategy.PATTERN] > 0:
-            return scores[MatchStrategy.PATTERN], MatchStrategy.PATTERN
 
-        # Return highest score even if it's 0
-        best_strategy = max(scores, key=scores.get)
-        best_score = scores[best_strategy]
-
-        return best_score, best_strategy    
+        return 0.0, MatchStrategy.FUZZY
 
 
 # ============================================================================
