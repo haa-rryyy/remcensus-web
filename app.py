@@ -1236,9 +1236,9 @@ if query:
 logger.info("Application render completed")
 
 
-# --- 8. SPREADSHEET ANALYSIS ENGINE ---
+# --- 8.  SPREADSHEET ANALYSIS ENGINE ---
 st.markdown("---")
-st.header("📊 8. Spreadsheet Analysis Engine")
+st.header("📊 8.    Spreadsheet Analysis Engine")
 
 # Import the engine
 from spreadsheet_engine import SpreadsheetEngine
@@ -1258,7 +1258,7 @@ def load_national_registry():
             return None
 
         # Google Sheets URL
-        sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit?usp=drive_link"
+        sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit? usp=drive_link"
 
         # Extract sheet ID from URL
         sheet_id = "1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U"
@@ -1305,45 +1305,37 @@ if engine is not None:
         else:
             st.success("✅ No data quality issues detected")
 
-    # Create tabs for different analysis modes
-    analysis_tab1, analysis_tab2, analysis_tab3 = st.tabs(
-        ["🔍 Search Members", "🔗 Name Lookup", "📊 Registry Browser"]
+    # Create tabs
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "🎭 Search 'Rinking Names",
+            "👤 Name Lookup",
+            "🎓 Search by University",
+            "🔍 Search by Other Value",
+        ]
     )
 
-    # TAB 1: SEARCH
-    with analysis_tab1:
-        st.subheader("Search the Registry")
-        st.write("Search for members by 'rinking name, full name, or any other field.")
+    # ========== TAB 1: SEARCH 'RINKING NAMES ==========
+    with tab1:
+        st.subheader("Search 'Rinking Names")
+        st.write("Search for members by 'rinking name.")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            search_query = st.text_input(
-                "Enter search term:",
-                placeholder="e.g., 'Tree of Life' or 'Harry Foley'",
-                key="registry_search_query",
-            )
-        with col2:
-            search_column = st.selectbox(
-                "Search column (or 'All'):",
-                ["All Columns"] + list(engine.df.columns),
-                key="registry_search_column",
-                index=0,
-            )
+        search_query = st.text_input(
+            "Enter 'rinking name:",
+            placeholder="e.g., 'Tree of Life'",
+            key="rinking_search_query",
+        )
 
         if search_query:
-            # Determine which column to search
-            search_col = None if search_column == "All Columns" else search_column
-
-            # Perform search with 50% threshold
-            with st.spinner("🔍 Searching..."):
-                results = engine.search(search_query, search_col, min_score=0.50)
+            with st.spinner("🔍 Searching... "):
+                results = engine.search(search_query, "'rinking Name", min_score=0.50)
 
             if results:
                 st.success(f"✅ Found {len(results)} match(es)")
 
                 for i, result in enumerate(results):
                     with st.expander(
-                        f"#{i+1} - {result.value} (Score: {result.score:.1%})",
+                        f"#{i+1} - {result. value} (Score: {result.score:.1%})",
                         expanded=(i == 0),
                     ):
                         col1, col2, col3, col4 = st.columns(4)
@@ -1358,10 +1350,8 @@ if engine is not None:
 
                         st.divider()
 
-                        # Display member info in a nice format
                         row_data = engine.get_row_data(result.row_index)
 
-                        # Extract key fields with fallbacks
                         rinking_name = engine.get_safe_value(
                             row_data, ["'rinking Name", "Drinking Name"]
                         )
@@ -1371,10 +1361,9 @@ if engine is not None:
                             row_data,
                             [
                                 "Est. Year of Graduation",
-                                "Est.  Year of Graduation",
+                                "Est.   Year of Graduation",
                                 "Est Year of Graduation",
                                 "Estimated Year of Graduation",
-                                "Est. Year of graduation",
                             ],
                         )
 
@@ -1392,178 +1381,264 @@ if engine is not None:
                                 pd.DataFrame([row_data]).T, use_container_width=True
                             )
             else:
-                st.warning("❌ No matches found.  Try a different search term.")
+                st.warning("❌ No matches found.   Try a different search term.")
 
-    # TAB 2: NAME LOOKUP
-    with analysis_tab2:
-        st.subheader("Cross-Reference Member Information")
-        st.write("Find a member by one field and retrieve information from another.")
+    # ========== TAB 2: NAME LOOKUP ==========
+    with tab2:
+        st.subheader("Search by Full Name")
+        st.write("Find a member by their full name.")
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            lookup_query = st.text_input(
-                "Value to find:",
-                placeholder="e.g., 'Harry Foley'",
-                key="registry_lookup_query",
-            )
-        with col2:
-            source_col = st.selectbox(
-                "In column:",
-                engine.df.columns,
-                key="registry_lookup_source",
-                index=1,  # Default to second column (usually Full Name)
-            )
-        with col3:
-            target_col = st.selectbox(
-                "Return from column:",
-                engine.df.columns,
-                key="registry_lookup_target",
-                index=0,  # Default to first column (usually 'rinking Name)
-            )
-
-        fuzzy_lookup = st.checkbox(
-            "Enable fuzzy matching (handles typos & OCR artifacts)",
-            value=True,
-            key="registry_lookup_fuzzy",
+        lookup_query = st.text_input(
+            "Enter full name:",
+            placeholder="e. g., 'Harry Foley'",
+            key="fullname_lookup_query",
         )
 
         if lookup_query:
-            with st.spinner("🔗 Looking up..."):
-                result = engine.lookup(
-                    lookup_query, source_col, target_col, fuzzy_lookup
-                )
+            with st.spinner("🔍 Searching..."):
+                results = engine.search(lookup_query, "Full Name", min_score=0.50)
 
-            if result:
-                st.success("✅ Match found!")
+            if results:
+                st.success(f"✅ Found {len(results)} match(es)")
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**{source_col}:**")
-                    st.code(result.source_value, language=None)
-                with col2:
-                    st.write(f"**{target_col}:**")
-                    st.code(result.target_value, language=None)
+                for i, result in enumerate(results):
+                    with st.expander(
+                        f"#{i+1} - {result.value} (Score: {result.score:.1%})",
+                        expanded=(i == 0),
+                    ):
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Match Score", f"{result.score:. 1%}")
+                        with col2:
+                            st.metric("Strategy", result.strategy.value.title())
+                        with col3:
+                            st.metric("Field", result.column)
+                        with col4:
+                            st.metric("Row ID", result.row_index)
 
-                st.divider()
+                        st.divider()
 
-                # Show full member record
-                row_data = engine.get_row_data(result.row_index)
+                        row_data = engine.get_row_data(result.row_index)
 
-                rinking_name = row_data.get(
-                    "'rinking Name", row_data.get("Drinking Name", "N/A")
-                )
-                full_name = row_data.get("Full Name", "N/A")
-                university = row_data.get("University", "N/A")
-                graduation_year = row_data.get("Est. Year of Graduation", "N/A")
+                        rinking_name = engine.get_safe_value(
+                            row_data, ["'rinking Name", "Drinking Name"]
+                        )
+                        full_name = engine.get_safe_value(row_data, ["Full Name"])
+                        university = engine.get_safe_value(row_data, ["University"])
+                        graduation_year = engine.get_safe_value(
+                            row_data,
+                            [
+                                "Est.  Year of Graduation",
+                                "Est.  Year of Graduation",
+                                "Est Year of Graduation",
+                                "Estimated Year of Graduation",
+                            ],
+                        )
 
-                st.write("**Complete Member Profile:**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"🎭 **'rinking Name:** {rinking_name}")
-                    st.write(f"👤 **Full Name:** {full_name}")
-                with col2:
-                    st.write(f"🎓 **University:** {university}")
-                    st.write(f"📅 **Graduation:** {graduation_year}")
+                        st.write("**Member Details:**")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"🎭 **'rinking Name:** {rinking_name}")
+                            st.write(f"👤 **Full Name:** {full_name}")
+                        with col2:
+                            st.write(f"🎓 **University:** {university}")
+                            st.write(f"📅 **Graduation:** {graduation_year}")
 
-                with st.expander("📋 All Fields"):
-                    st.dataframe(pd.DataFrame([row_data]).T, use_container_width=True)
+                        with st.expander("📋 Full Member Record"):
+                            st.dataframe(
+                                pd.DataFrame([row_data]).T, use_container_width=True
+                            )
             else:
-                st.error(
-                    "❌ No match found. Try a different value or enable fuzzy matching."
-                )
+                st.error("❌ No match found.  Try a different name.")
 
-    # TAB 3: REGISTRY BROWSER
-    with analysis_tab3:
-        st.subheader("Browse the Registry")
+    # ========== TAB 3: SEARCH BY UNIVERSITY ==========
+    with tab3:
+        st.subheader("Search by University")
+        st.write("Find all members from a specific university.")
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Field Statistics:**")
-            column_info = engine.get_column_info()
-
-            # Create a simplified stats view
-            stats_data = []
-            for col, info in column_info.items():
-                stats_data.append(
-                    {
-                        "Column": col,
-                        "Non-Null": info["non_null"],
-                        "Unique": info["unique_values"],
-                    }
-                )
-
-            stats_df = pd.DataFrame(stats_data)
-            st.dataframe(stats_df, use_container_width=True)
-
-        with col2:
-            st.write("**Data Type Distribution:**")
-            dtype_counts = engine.df.dtypes.value_counts()
-            st.bar_chart(dtype_counts)
-
-        st.divider()
-
-        # Search by university
-        st.write("**Filter by University:**")
-        universities = ["All"] + sorted(
+        universities = sorted(
             [u for u in engine.df["University"].unique() if pd.notna(u)]
         )
         selected_uni = st.selectbox(
-            "Select university:", universities, key="registry_uni_filter"
+            "Select university:", universities, key="uni_filter_select"
         )
 
-        if selected_uni != "All":
+        if st.button("Go", key="uni_filter_go"):
             filtered_df = engine.df[engine.df["University"] == selected_uni]
-            st.write(f"Found {len(filtered_df)} members from {selected_uni}")
-        else:
-            filtered_df = engine.df
-            st.write(f"Showing all {len(filtered_df)} members")
+            st.success(f"✅ Found {len(filtered_df)} member(s) from {selected_uni}")
 
-        st.divider()
+            # Display results
+            for idx, row in filtered_df.iterrows():
+                row_data = dict(row)
+                rinking_name = engine.get_safe_value(
+                    row_data, ["'rinking Name", "Drinking Name"]
+                )
+                full_name = engine.get_safe_value(row_data, ["Full Name"])
 
-        # Preview data
-        rows_to_show = st.slider(
-            "Number of rows to preview:", 5, min(len(filtered_df), 50), 10
+                with st.expander(f"{rinking_name} - {full_name}"):
+                    university = engine.get_safe_value(row_data, ["University"])
+                    graduation_year = engine.get_safe_value(
+                        row_data,
+                        [
+                            "Est. Year of Graduation",
+                            "Est.   Year of Graduation",
+                            "Est Year of Graduation",
+                            "Estimated Year of Graduation",
+                        ],
+                    )
+
+                    st.write("**Member Details:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"🎭 **'rinking Name:** {rinking_name}")
+                        st.write(f"👤 **Full Name:** {full_name}")
+                    with col2:
+                        st.write(f"🎓 **University:** {university}")
+                        st.write(f"📅 **Graduation:** {graduation_year}")
+
+                    with st.expander("📋 Full Record"):
+                        st.dataframe(
+                            pd.DataFrame([row_data]).T, use_container_width=True
+                        )
+
+    # ========== TAB 4: SEARCH BY OTHER VALUE ==========
+    with tab4:
+        st.subheader("Search by Other Value")
+        st.write("Find members by various attributes.")
+
+        # Columns to exclude
+        exclude_cols = {"'rinking Name", "Drinking Name", "Full Name", "University"}
+        available_cols = [col for col in engine.df.columns if col not in exclude_cols]
+
+        selected_col = st.selectbox(
+            "Select field:", available_cols, key="other_value_select"
         )
-        st.write(
-            f"**Preview (showing {min(rows_to_show, len(filtered_df))} of {len(filtered_df)} rows):**"
-        )
 
-        # Get available columns
-        available_cols = [
-            col
-            for col in filtered_df.columns
-            if col
-            in [
-                "'rinking Name",
-                "Drinking Name",
-                "Full Name",
-                "University",
-                "Est. Year of Graduation",
-            ]
-        ]
-        if available_cols:
-            st.dataframe(
-                filtered_df[available_cols].head(rows_to_show), use_container_width=True
+        if st.button("Go", key="other_value_go"):
+            # Get unique values for the selected column
+            unique_values = sorted(
+                [str(v) for v in engine.df[selected_col].unique() if pd.notna(v)]
             )
-        else:
-            st.dataframe(filtered_df.head(rows_to_show), use_container_width=True)
 
-        st.divider()
+            if not unique_values:
+                st.warning(f"No values found in {selected_col}")
+            else:
+                # Display all unique values
+                st.write(f"**Values in {selected_col}:**")
 
-        # Download option
-        st.write("**Export Data:**")
-        csv = filtered_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Download Registry as CSV",
-            data=csv,
-            file_name="national_registry_export.csv",
-            mime="text/csv",
-        )
+                for value in unique_values:
+                    # Filter rows that match this value
+                    filtered_df = engine.df[
+                        engine.df[selected_col].astype(str) == value
+                    ]
+
+                    # Special sorting for Current/'ast columns
+                    if selected_col in [
+                        "NHA",
+                        "NHA Chair",
+                        "RACRL",
+                        "KHA",
+                        "NSWHA",
+                        "SAHA",
+                        "VHA",
+                        "WAHA",
+                        "THA",
+                    ]:
+                        # Sort:  Current first, then 'ast by graduation year (most recent first)
+                        def sort_key(row):
+                            status = str(row.get(selected_col, ""))
+                            graduation = row.get(
+                                "Est. Year of Graduation",
+                                row.get("Est.   Year of Graduation", 0),
+                            )
+
+                            # Try to convert to int for sorting
+                            try:
+                                grad_year = (
+                                    int(graduation)
+                                    if graduation not in [None, "", "nan"]
+                                    else 0
+                                )
+                            except:
+                                grad_year = 0
+
+                            # Current comes first (0), then 'ast sorted by year descending (1 + negative year)
+                            if status == "Current":
+                                return (0, 0)
+                            elif status == "'ast":
+                                return (1, -grad_year)
+                            else:
+                                return (2, -grad_year)
+
+                        filtered_df = filtered_df.copy()
+                        filtered_df["sort_key"] = filtered_df.apply(sort_key, axis=1)
+                        filtered_df = filtered_df.sort_values("sort_key").drop(
+                            "sort_key", axis=1
+                        )
+
+                    else:
+                        # Sort by graduation year (most recent first)
+                        def get_graduation_year(row):
+                            graduation = row.get(
+                                "Est. Year of Graduation",
+                                row.get("Est.  Year of Graduation", 0),
+                            )
+                            try:
+                                return (
+                                    -int(graduation)
+                                    if graduation not in [None, "", "nan"]
+                                    else 0
+                                )
+                            except:
+                                return 0
+
+                        filtered_df = filtered_df.copy()
+                        filtered_df["sort_key"] = filtered_df.apply(
+                            get_graduation_year, axis=1
+                        )
+                        filtered_df = filtered_df.sort_values("sort_key").drop(
+                            "sort_key", axis=1
+                        )
+
+                    # Display results grouped by value
+                    with st.expander(f"**{value}** ({len(filtered_df)} member(s))"):
+                        for idx, row in filtered_df.iterrows():
+                            row_data = dict(row)
+
+                            rinking_name = engine.get_safe_value(
+                                row_data, ["'rinking Name", "Drinking Name"]
+                            )
+                            full_name = engine.get_safe_value(row_data, ["Full Name"])
+                            university = engine.get_safe_value(row_data, ["University"])
+                            graduation_year = engine.get_safe_value(
+                                row_data,
+                                [
+                                    "Est. Year of Graduation",
+                                    "Est.   Year of Graduation",
+                                    "Est Year of Graduation",
+                                    "Estimated Year of Graduation",
+                                ],
+                            )
+
+                            with st.expander(f"{rinking_name} - {full_name}"):
+                                st.write("**Member Details:**")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.write(f"🎭 **'rinking Name:** {rinking_name}")
+                                    st.write(f"👤 **Full Name:** {full_name}")
+                                with col2:
+                                    st.write(f"🎓 **University:** {university}")
+                                    st.write(f"📅 **Graduation:** {graduation_year}")
+
+                                with st.expander("📋 Full Record"):
+                                    st.dataframe(
+                                        pd.DataFrame([row_data]).T,
+                                        use_container_width=True,
+                                    )
 
 else:
     st.error(
-        "❌ Failed to load The National Registry. Please check your internet connection."
+        "❌ Failed to load The National Registry.   Please check your internet connection."
     )
 
 logger.info("Spreadsheet analysis section rendered")
