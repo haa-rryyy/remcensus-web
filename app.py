@@ -864,7 +864,7 @@ def fetch_drive_recent_files(drive_id, search_query=None, score_threshold=SCORE_
         raise
 
 
-# --- 7.MAIN INTERFACE ---
+# --- 7. MAIN INTERFACE ---
 query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
 
 if query:
@@ -873,7 +873,7 @@ if query:
             "query": query,
             "timestamp": datetime.now().isoformat(),
             "category_detection": None,
-            "date_constraints": None,
+            "date_constraints":  None,
             "pinecone_results": [],
             "drive_results": [],
             "extracted_content": [],
@@ -882,7 +882,7 @@ if query:
         }
 
         try:
-            logger.info(f"Processing query: {query[:  100]}...")
+            logger.info(f"Processing query: {query[: 100]}...")
 
             # Step 1: Pinecone retrieval
             logger.info("Step 1: Running Pinecone embedding and retrieval...")
@@ -894,7 +894,7 @@ if query:
             )
             context_text = ""
 
-            for match in search_results["matches"]:
+            for match in search_results["matches"]: 
                 meta = match["metadata"]
                 context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
                 search_process["pinecone_results"].append(
@@ -916,7 +916,7 @@ if query:
                     logger.info("Extracting date constraints from query...")
                     date_constraints = extract_date_constraints_from_query(query)
                     search_process["date_constraints"] = {
-                        k: str(v) if isinstance(v, datetime) else v 
+                        k: str(v) if isinstance(v, datetime) else v
                         for k, v in date_constraints.items()
                     }
 
@@ -939,14 +939,14 @@ if query:
 
                     logger.info(f"Found {len(drive_files)} files")
 
-                    if drive_files:  
+                    if drive_files:
                         for idx, f in enumerate(drive_files):
                             search_process["drive_results"].append(
                                 {
                                     "rank": idx + 1,
                                     "name": f.get("name"),
                                     "mime_type": f.get("mimeType"),
-                                    "modified":  f.get("modifiedTimeISO"),
+                                    "modified": f.get("modifiedTimeISO"),
                                 }
                             )
 
@@ -973,7 +973,7 @@ if query:
                                     "mime_type": mime_type,
                                     "content_length": len(content),
                                 })
-                                context_text += f"\n\n--- Content from {file_name} ---\n{content[:  10000]}\n"
+                                context_text += f"\n\n--- Content from {file_name} ---\n{content[: 10000]}\n"
                             else:
                                 logger.error(f"Failed to extract {file_name}: {error}")
                                 search_process["errors"].append(f"Content extraction failed: {error}")
@@ -983,7 +983,7 @@ if query:
                         for f in drive_files:
                             context_text += f"- {f.get('name')} (Modified: {f.get('modifiedTimeISO')})\n"
 
-                    else:  
+                    else:
                         logger.warning("No files found in Drive search")
                         search_process["errors"].append("No files found in Drive search")
 
@@ -991,31 +991,31 @@ if query:
                 logger.error(f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}")
                 search_process["errors"].append(f"Drive search error: {str(e_drive)}")
 
-        # Step 3: Generate response with CLEAN context
-        logger.info("Step 3: Preparing context for LLM...")
+            # Step 3: Generate response with CLEAN context
+            logger.info("Step 3: Preparing context for LLM...")
 
-        # Keep original for logging
-        context_for_llm = context_text.copy() if isinstance(context_text, str) else str(context_text)
+            # Keep original for logging
+            context_for_llm = context_text.copy() if isinstance(context_text, str) else str(context_text)
 
-        # Remove metadata from context sent to LLM (keep it clean)
-        context_for_llm = re.sub(
-            r'\n---\nGoogle Drive Files Found:\n.*? (?=\n\n|\Z)',
-            '',
-            context_for_llm,
-            flags=re.DOTALL
-        )
+            # Remove metadata from context sent to LLM (keep it clean)
+            context_for_llm = re.sub(
+                r'\n---\nGoogle Drive Files Found:\n.*?  (?=\n\n|\Z)',
+                '',
+                context_for_llm,
+                flags=re.DOTALL
+            )
 
-           logger.info(f"Context sent to LLM: {len(context_for_llm)} chars (cleaned)")
+            logger.info(f"Context sent to LLM: {len(context_for_llm)} chars (cleaned)")
 
-           logger.info("Step 3: Generating response from LLM...")
-           raw_text, engine_used, logs = generate_response(context_for_llm, query)
-           search_process["llm_engine_used"] = engine_used
-           final_answer = enforce_rem_lexicon(raw_text)
+            logger.info("Step 3: Generating response from LLM...")
+            raw_text, engine_used, logs = generate_response(context_for_llm, query)
+            search_process["llm_engine_used"] = engine_used
+            final_answer = enforce_rem_lexicon(raw_text)
 
             st.info(final_answer)
             st.caption(f"Generated via:  {engine_used}")
 
-            logger.info(f"Query processing completed.Engine:   {engine_used}")
+            logger.info(f"Query processing completed. Engine: {engine_used}")
 
             # Developer mode only
             if dev_mode:
@@ -1037,11 +1037,11 @@ if query:
                     if search_process["drive_results"]:
                         st.markdown("#### Files Found")
                         for result in search_process["drive_results"]:
-                            st.write(f"- **{result['name']}** ({result['mime_type']}, Modified: {result.get('modified', 'N/A')})")
+                            st.write(f"- **{result['name']}** ({result['mime_type']}, Modified:  {result.get('modified', 'N/A')})")
 
                     if search_process["extracted_content"]:
                         st.markdown("#### Extracted Content")
-                        for content in search_process["extracted_content"]:
+                        for content in search_process["extracted_content"]: 
                             st.write(f"- **{content['filename']}** ({content['content_length']} chars)")
 
                     if search_process["errors"]:
@@ -1058,13 +1058,13 @@ if query:
                         mime="application/json",
                     )
 
-        except Exception as e:
-            logger.error(f"Critical error:   {type(e).__name__} - {str(e)}", exc_info=True)
+        except Exception as e: 
+            logger.error(f"Critical error:  {type(e).__name__} - {str(e)}", exc_info=True)
             search_process["errors"].append(f"Critical error: {str(e)}")
 
             st.error(f"⚠️ Error processing query: {str(e)}")
 
-            if dev_mode:
+            if dev_mode: 
                 with st.expander("🔴 Error Details"):
                     st.write(f"**Error Type:** {type(e).__name__}")
                     st.write(f"**Message:** {str(e)}")
