@@ -582,32 +582,42 @@ SYSTEM_PROMPT = (
 
 # --- 4.  TRIPLE-ENGINE HANDLER WITH IMPROVED FORMATTING ---
 def generate_response(context, query):
-    """Generate response optimized for FREE tier services."""
+    """Generate response with consistent formatting."""
     debug_logs = []
     
-    # Detect if this is a summary request
+    # Limit context
+    max_context_length = 8000
+    if len(context) > max_context_length:
+        context = context[:max_context_length] + "\n[... content truncated...]"
+    
     is_summary_request = any(word in query.lower() for word in ['summar', 'outline', 'overview', 'recap'])
     
-    # Adjust system prompt based on request type
+    system_prompt = SYSTEM_PROMPT
     if is_summary_request:
-        system_prompt = (
-            SYSTEM_PROMPT + "\n\n"
-            "SUMMARY FORMAT:  Provide a concise summary with bullet points. Keep brief."
+        system_prompt += (
+            "\n\nRESPONSE FORMAT:\n"
+            "Provide ONLY information from the provided document.\n"
+            "Do NOT add information from other meetings or documents.\n"
+            "Structure as:\n"
+            "- Date and location\n"
+            "- Attendees\n"
+            "- Motions (passed/not passed)\n"
+            "- Actions\n"
+            "- Notes\n"
+            "Keep factual and concise."
         )
-    else:
-        system_prompt = SYSTEM_PROMPT
     
     try:
-        # Try Groq first (free tier available)
+        # ALWAYS try Groq first (most reliable)
         logger.info("Attempting Groq (Llama 3.3)...")
         chat_completion = st.session_state.groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Context:\n{context}\n\nQuestion:  {query}"},
+                {"role": "user", "content": f"Context:\n{context}\n\nQuery: {query}"},
             ],
             model="llama-3.3-70b-versatile",
-            temperature=0.7,
-            max_tokens=800,  # Keep at 800 for free tier
+            temperature=0.5,
+            max_tokens=800,
         )
         return (
             chat_completion.choices[0].message.content.strip(),
@@ -615,15 +625,15 @@ def generate_response(context, query):
             debug_logs,
         )
     except Exception as e: 
-        debug_logs.append(f"Groq:  {str(e)}")
+        debug_logs.append(f"Groq: {str(e)}")
         logger.warning(f"Groq failed: {str(e)}")
         
+        # Fallback to Gemini
         try:
-            # Try Gemini second (free tier available)
-            logger.info("Attempting Gemini (1.5 Flash)...")
+            logger.info("Attempting Gemini...")
             response = st.session_state.google_client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=f"Context:\n{context}\n\nQuestion: {query}",
+                contents=f"Context:\n{context}\n\nQuery: {query}",
                 config={"system_instruction": system_prompt},
             )
             return response.text.strip(), "Gemini (1.5 Flash)", debug_logs
@@ -631,31 +641,26 @@ def generate_response(context, query):
             debug_logs.append(f"Gemini: {str(e_gem)}")
             logger.warning(f"Gemini failed: {str(e_gem)}")
             
+            # Only use HF as last resort
             try:
-                # Try HuggingFace last (FREE 3B model)
-                logger.info("Attempting HuggingFace (Llama 3.2 - FREE)...")
+                logger.info("Attempting HuggingFace...")
                 response = st.session_state.hf_client.chat_completion(
-                    model="meta-llama/Llama-3.2-3B-Instruct",  # SMALLER = FREE
+                    model="meta-llama/Llama-3.2-70B-Instruct", # Use 70B not 3B
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"},
+                        {"role": "user", "content": f"Context:\n{context}\n\nQuery: {query}"},
                     ],
-                    max_tokens=800,  # Standard size
-                    temperature=0.7,
+                    max_tokens=800,
+                    temperature=0.5,
                 )
                 return (
                     response.choices[0].message.content.strip(),
-                    "HuggingFace (Llama 3.2 3B - FREE)",
+                    "HuggingFace (Llama 3.2 70B)",
                     debug_logs,
                 )
-            except Exception as e_hf:
-                debug_logs.append(f"HF: {str(e_hf)}")
+            except Exception as e_hf: 
                 logger.error(f"All engines failed")
-                return (
-                    "⚠️ SYSTEM FAILURE:  Unable to process your query.",
-                    "OFFLINE",
-                    debug_logs,
-                )
+                return "⚠️ Unable to generate summary", "OFFLINE", debug_logs
 
 
 # --- 5.FOLDER STRUCTURE INTELLIGENCE ---
@@ -999,18 +1004,28 @@ if query:
             # Step 3: Generate response with CLEAN context
             logger.info("Step 3: Preparing context for LLM...")
 
-            # Keep original for logging
-            context_for_llm = context_text
+            # Extract ONLY content from the primary (first) file
+            # Don't include metadata or other files' content
+            primary_content_start = context_text.find("--- Content from")
+            if primary_content_start != -1:
+                # Find the end of first file content (before the metadata section)
+                metadata_start = context_text.find("\n---\nGoogle Drive Files Found:", primary_content_start)
+                if metadata_start != -1:
+                    context_for_llm = context_text[primary_content_start:metadata_start]
+                else:
+                    context_for_llm = context_text[primary_content_start:]
+            else:
+                context_for_llm = context_text
 
-            # Remove metadata from context sent to LLM (keep it clean)
+            # Remove any metadata markers
             context_for_llm = re.sub(
-                r'\n---\nGoogle Drive Files Found:\n.*?  (?=\n\n|\Z)',
+                r'\n---\nGoogle Drive Files Found: .*',
                 '',
                 context_for_llm,
                 flags=re.DOTALL
             )
 
-            logger.info(f"Context sent to LLM: {len(context_for_llm)} chars (cleaned)")
+            logger.info(f"Context sent to LLM: {len(context_for_llm)} chars (primary file only)")
 
             logger.info("Step 3: Generating response from LLM...")
             raw_text, engine_used, logs = generate_response(context_for_llm, query)
@@ -1018,7 +1033,7 @@ if query:
             final_answer = enforce_rem_lexicon(raw_text)
 
             st.info(final_answer)
-            st.caption(f"Generated via:  {engine_used}")
+            st.caption(f"Generated via: {engine_used}")
 
             logger.info(f"Query processing completed. Engine: {engine_used}")
 
