@@ -181,13 +181,13 @@ def extract_date_constraints_from_query(query):
         logger.debug(f"Detected 'within {constraints['within_months']} months' constraint")
     
     # Check for "within X years"
-    within_years_match = re.search(r'within\s+(? :the\s+)?last\s+(\d+)\s+years?', query_lower)
+    within_years_match = re.search(r'within\s+(?:the\s+)?last\s+(\d+)\s+years?', query_lower)
     if within_years_match:
         constraints["within_years"] = int(within_years_match.group(1))
         logger.debug(f"Detected 'within {constraints['within_years']} years' constraint")
     
     # Check for "after DATE"
-    after_match = re.search(r'after\s+([^\s,]+(? :\s+[^\s,]+)*)', query_lower)
+    after_match = re.search(r'after\s+([^\s,]+(?:\s+[^\s,]+)*)', query_lower)
     if after_match:
         date_str = after_match.group(1)
         parsed = parse_date(date_str)
@@ -205,7 +205,7 @@ def extract_date_constraints_from_query(query):
             logger.debug(f"Detected 'before {parsed.isoformat()}' constraint")
     
     # Check for specific year (e.g., "in 2025", "from 2020")
-    year_match = re.search(r'(? :in|from)\s+(20\d{2}|19\d{2})', query_lower)
+    year_match = re.search(r'(?:in|from)\s+(20\d{2}|19\d{2})', query_lower)
     if year_match:
         constraints["specific_year"] = int(year_match.group(1))
         logger.debug(f"Detected 'specific year {constraints['specific_year']}' constraint")
@@ -266,7 +266,8 @@ def apply_date_filter(files, constraints, current_time=None):
         
         # Check "within X months" constraint
         if constraints["within_months"] and include_file:
-            cutoff = current_time - timedelta(days=constraints["within_months"] * 30)  # Approximate
+            from dateutil.relativedelta import relativedelta
+            cutoff = current_time - relativedelta(months=constraints["within_months"])
             if file_time < cutoff:
                 include_file = False
                 logger.debug(f"File {file.get('name')} excluded (older than {constraints['within_months']} months)")
