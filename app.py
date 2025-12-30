@@ -12,6 +12,9 @@ import os
 import traceback
 import io
 from dateutil import parser as dateutil_parser
+import pandas as pd
+import numpy as np
+from spreadsheet_engine import SpreadsheetEngine
 
 # Google Drive API imports
 from google.auth.transport.requests import Request
@@ -1312,7 +1315,7 @@ if engine is not None:
         st.subheader("Search the Registry")
         st.write("Search for members by 'rinking name, full name, or any other field.")
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             search_query = st.text_input(
                 "Enter search term:",
@@ -1326,29 +1329,21 @@ if engine is not None:
                 key="registry_search_column",
                 index=0,
             )
-        with col3:
-            top_k = st.number_input(
-                "Number of results:",
-                min_value=1,
-                max_value=20,
-                value=5,
-                key="registry_search_top_k",
-            )
 
         if search_query:
             # Determine which column to search
             search_col = None if search_column == "All Columns" else search_column
 
-            # Perform search
+            # Perform search with 50% threshold
             with st.spinner("🔍 Searching..."):
-                results = engine.search(search_query, search_col, top_k=top_k)
+                results = engine.search(search_query, search_col, min_score=0.50)
 
             if results:
                 st.success(f"✅ Found {len(results)} match(es)")
 
                 for i, result in enumerate(results):
                     with st.expander(
-                        f"#{i+1} - {result. value} (Score: {result.score:.1%})",
+                        f"#{i+1} - {result.value} (Score: {result.score:.1%})",
                         expanded=(i == 0),
                     ):
                         col1, col2, col3, col4 = st.columns(4)
@@ -1366,14 +1361,21 @@ if engine is not None:
                         # Display member info in a nice format
                         row_data = engine.get_row_data(result.row_index)
 
-                        # Extract key fields - check for both versions of the column name
-                        rinking_name = row_data.get(
-                            "'rinking Name", row_data.get("Drinking Name", "N/A")
+                        # Extract key fields with fallbacks
+                        rinking_name = engine.get_safe_value(
+                            row_data, ["'rinking Name", "Drinking Name"]
                         )
-                        full_name = row_data.get("Full Name", "N/A")
-                        university = row_data.get("University", "N/A")
-                        graduation_year = row_data.get(
-                            "Est.  Year of Graduation", "N/A"
+                        full_name = engine.get_safe_value(row_data, ["Full Name"])
+                        university = engine.get_safe_value(row_data, ["University"])
+                        graduation_year = engine.get_safe_value(
+                            row_data,
+                            [
+                                "Est. Year of Graduation",
+                                "Est.  Year of Graduation",
+                                "Est Year of Graduation",
+                                "Estimated Year of Graduation",
+                                "Est. Year of graduation",
+                            ],
                         )
 
                         st.write("**Member Details:**")
@@ -1390,7 +1392,7 @@ if engine is not None:
                                 pd.DataFrame([row_data]).T, use_container_width=True
                             )
             else:
-                st.warning("❌ No matches found. Try a different search term.")
+                st.warning("❌ No matches found.  Try a different search term.")
 
     # TAB 2: NAME LOOKUP
     with analysis_tab2:
@@ -1409,7 +1411,7 @@ if engine is not None:
                 "In column:",
                 engine.df.columns,
                 key="registry_lookup_source",
-                index=1, # Default to second column (usually Full Name)
+                index=1,  # Default to second column (usually Full Name)
             )
         with col3:
             target_col = st.selectbox(
