@@ -995,7 +995,7 @@ if query:
             logger.info("Step 3: Preparing context for LLM...")
 
             # Keep original for logging
-            context_for_llm = context_text.copy() if isinstance(context_text, str) else str(context_text)
+            context_for_llm = context_text
 
             # Remove metadata from context sent to LLM (keep it clean)
             context_for_llm = re.sub(
