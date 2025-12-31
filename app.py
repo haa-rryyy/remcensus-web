@@ -1249,6 +1249,45 @@ def fetch_drive_recent_files(
 
 # --- 7. MAIN INTERFACE ---
 
+# Import the spreadsheet engine (used by registry views)
+from spreadsheet_engine import SpreadsheetEngine
+import pandas as pd
+
+# Function to load The National Registry from Google Sheets
+@st.cache_resource
+def load_national_registry():
+    """Load The National Registry from Google Sheets"""
+    try:
+        # Use the existing Google Sheets credentials from session state
+        if st.session_state.google_client is None:
+            st.error(
+                "❌ Google authentication not initialized. Please check your setup."
+            )
+            return None
+
+        # Google Sheets URL
+        sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit?usp=drive_link"
+
+        # Extract sheet ID from URL
+        sheet_id = "1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U"
+
+        # Convert to CSV export URL
+        csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+
+        # Load the data
+        df = pd.read_csv(csv_url)
+
+        st.session_state.spreadsheet_engine = SpreadsheetEngine(df)
+        st.session_state.spreadsheet_name = "The National Registry"
+
+        logger.info("✅ Loaded The National Registry from Google Drive")
+        return st.session_state.spreadsheet_engine
+
+    except Exception as e:
+        logger.error(f"Error loading The National Registry: {str(e)}")
+        st.error(f"❌ Error loading The National Registry: {str(e)}")
+        return None
+
 # Function to change view
 def set_view(view_name):
     st.session_state.current_view = view_name
@@ -1565,45 +1604,6 @@ elif st.session_state.current_view == "rinking_names":
     st.markdown("### 📊 Registry Search")
     st.markdown("Search The National Registry for 'rinking names")
     
-    # Import the engine
-    from spreadsheet_engine import SpreadsheetEngine
-    import pandas as pd
-    
-    # Function to load The National Registry from Google Sheets
-    @st.cache_resource
-    def load_national_registry():
-        """Load The National Registry from Google Sheets"""
-        try:
-            # Use the existing Google Sheets credentials from session state
-            if st.session_state.google_client is None:
-                st.error(
-                    "❌ Google authentication not initialized. Please check your setup."
-                )
-                return None
-
-            # Google Sheets URL
-            sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit? usp=drive_link"
-
-            # Extract sheet ID from URL
-            sheet_id = "1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U"
-
-            # Convert to CSV export URL
-            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-
-            # Load the data
-            df = pd.read_csv(csv_url)
-
-            st.session_state.spreadsheet_engine = SpreadsheetEngine(df)
-            st.session_state.spreadsheet_name = "The National Registry"
-
-            logger.info("✅ Loaded The National Registry from Google Drive")
-            return st.session_state.spreadsheet_engine
-
-        except Exception as e:
-            logger.error(f"Error loading The National Registry: {str(e)}")
-            st.error(f"❌ Error loading The National Registry: {str(e)}")
-            return None
-    
     # Load the registry automatically
     with st.spinner("📥 Loading The National Registry from Google Drive..."):
         engine = load_national_registry()
@@ -1708,45 +1708,6 @@ elif st.session_state.current_view == "find_layer":
     st.markdown("---")
     st.markdown("### 📊 Registry Search")
     st.markdown("Search The National Registry for members")
-    
-    # Import the engine
-    from spreadsheet_engine import SpreadsheetEngine
-    import pandas as pd
-    
-    # Function to load The National Registry from Google Sheets
-    @st.cache_resource
-    def load_national_registry():
-        """Load The National Registry from Google Sheets"""
-        try:
-            # Use the existing Google Sheets credentials from session state
-            if st.session_state.google_client is None:
-                st.error(
-                    "❌ Google authentication not initialized. Please check your setup."
-                )
-                return None
-
-            # Google Sheets URL
-            sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit? usp=drive_link"
-
-            # Extract sheet ID from URL
-            sheet_id = "1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U"
-
-            # Convert to CSV export URL
-            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-
-            # Load the data
-            df = pd.read_csv(csv_url)
-
-            st.session_state.spreadsheet_engine = SpreadsheetEngine(df)
-            st.session_state.spreadsheet_name = "The National Registry"
-
-            logger.info("✅ Loaded The National Registry from Google Drive")
-            return st.session_state.spreadsheet_engine
-
-        except Exception as e:
-            logger.error(f"Error loading The National Registry: {str(e)}")
-            st.error(f"❌ Error loading The National Registry: {str(e)}")
-            return None
     
     # Load the registry automatically
     with st.spinner("📥 Loading The National Registry from Google Drive..."):
