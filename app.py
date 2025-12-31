@@ -45,6 +45,194 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# --- CUSTOM CSS FOR CONSENSUS-STYLE UI ---
+st.markdown("""
+<style>
+    /* Modern, clean layout */
+    .main .block-container {
+        max-width: 900px;
+        padding-top: 3rem;
+        padding-bottom: 3rem;
+    }
+    
+    /* Clean sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+    }
+    
+    [data-testid="stSidebar"] .element-container {
+        padding: 0.5rem 0;
+    }
+    
+    /* Hide default Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Modern heading styling */
+    h1, h2, h3 {
+        font-weight: 600;
+        color: #1a1a1a;
+    }
+    
+    /* Branding section */
+    .remcensus-brand {
+        text-align: center;
+        margin: 2rem 0 1rem 0;
+    }
+    
+    .remcensus-title {
+        font-size: 3rem;
+        font-weight: 700;
+        color: #16a8b6;
+        margin-bottom: 0.5rem;
+    }
+    
+    .remcensus-tagline {
+        font-size: 1.25rem;
+        color: #666;
+        margin-bottom: 2rem;
+    }
+    
+    /* Search bar styling */
+    .stTextInput > div > div > input {
+        border-radius: 50px;
+        border: 2px solid #e0e0e0;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #16a8b6;
+        box-shadow: 0 0 0 3px rgba(22, 168, 182, 0.1);
+    }
+    
+    /* Action buttons styling */
+    .action-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+    }
+    
+    .action-button {
+        background-color: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        border-radius: 25px;
+        padding: 0.75rem 1.5rem;
+        color: #333;
+        text-align: center;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .action-button:hover {
+        background-color: #16a8b6;
+        color: white;
+        border-color: #16a8b6;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(22, 168, 182, 0.2);
+    }
+    
+    /* Card-style results */
+    .result-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+    }
+    
+    .result-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    /* Improved spacing */
+    .stMarkdown {
+        line-height: 1.6;
+    }
+    
+    /* Info boxes */
+    .stAlert {
+        border-radius: 12px;
+        border-left: 4px solid #16a8b6;
+    }
+    
+    /* Sidebar navigation styling */
+    [data-testid="stSidebar"] h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: #16a8b6;
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown {
+        font-size: 0.95rem;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        border-radius: 25px;
+        border: 2px solid #16a8b6;
+        background-color: #16a8b6;
+        color: white;
+        padding: 0.5rem 2rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background-color: #1293a0;
+        border-color: #1293a0;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(22, 168, 182, 0.3);
+    }
+    
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #16a8b6;
+        color: white;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        font-weight: 500;
+    }
+    
+    /* Metrics styling */
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #16a8b6;
+    }
+    
+    /* Clean dividers */
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 1px solid #e0e0e0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- SCORE THRESHOLD CONFIGURATION ---
 SCORE_THRESHOLD = 8  # Minimum score for a file to be included in results
 
@@ -567,18 +755,27 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
         return "", False, f"Unexpected error:  {str(e)}"
 
 
-# Sidebar controls
-st.sidebar.title("🦁 'Remcensus")
-st.sidebar.success("✅ Protocol Discovery Active")
+# Sidebar navigation
+st.sidebar.markdown("### 🦁 'Remcensus")
+st.sidebar.markdown("Protocol Discovery System")
 st.sidebar.markdown("---")
 
+# Navigation sections
+st.sidebar.markdown("### Navigation")
+st.sidebar.markdown("🏠 Home")
+st.sidebar.markdown("📜 History")
+st.sidebar.markdown("📚 Library")
+st.sidebar.markdown("---")
+
+# Settings section
+st.sidebar.markdown("### Settings")
 extract_content = st.sidebar.checkbox(
-    "Extract file content for summarization", value=True
+    "Extract file content", value=True
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛠️ Developer Mode")
-dev_mode = st.sidebar.checkbox("Enable Developer Mode", value=False)
+st.sidebar.markdown("### 🛠️ Developer")
+dev_mode = st.sidebar.checkbox("Dev Mode", value=False)
 
 # SECURE CONNECTION
 if "init_done" not in st.session_state:
@@ -989,7 +1186,40 @@ def fetch_drive_recent_files(
 
 
 # --- 7. MAIN INTERFACE ---
-query = st.text_input("Enter Query Parameters:", placeholder="Search the archives...")
+# Homepage branding
+st.markdown("""
+<div class="remcensus-brand">
+    <div class="remcensus-title">🦁 'Remcensus</div>
+    <div class="remcensus-tagline">Thinking is 'Rinking</div>
+</div>
+""", unsafe_allow_html=True)
+
+# Search bar
+query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="main_search")
+
+# Quick action buttons
+if not query:
+    st.markdown("""
+    <div class="action-buttons">
+        <div class="action-button">Ask the 'Remsearch</div>
+        <div class="action-button">Search for 'Rinking Names</div>
+        <div class="action-button">Find a 'Layer</div>
+        <div class="action-button">Generate an 'Uzzle</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Add some feature highlights
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("### 📚 Protocol Archives")
+        st.markdown("Search through comprehensive 'Remier League documentation")
+    with col2:
+        st.markdown("### 🔍 Smart Search")
+        st.markdown("AI-powered search with context and date filtering")
+    with col3:
+        st.markdown("### 📊 Registry Access")
+        st.markdown("Quick lookup of members and 'rinking names")
 
 if query:
     with st.spinner("🌀 Triage in progress..."):
@@ -1165,8 +1395,13 @@ if query:
             search_process["llm_engine_used"] = engine_used
             final_answer = enforce_rem_lexicon(raw_text)
 
-            st.info(final_answer)
-            st.caption(f"Generated via: {engine_used}")
+            # Display result in a card
+            st.markdown(f"""
+            <div class="result-card">
+                {final_answer}
+            </div>
+            """, unsafe_allow_html=True)
+            st.caption(f"🤖 Generated via: {engine_used}")
 
             logger.info(f"Query processing completed. Engine: {engine_used}")
 
@@ -1238,7 +1473,8 @@ logger.info("Application render completed")
 
 # --- 8.  SPREADSHEET ANALYSIS ENGINE ---
 st.markdown("---")
-st.header("📊 8.    Spreadsheet Analysis Engine")
+st.markdown("### 📊 Registry Search")
+st.markdown("Search The National Registry for members and 'rinking names")
 
 # Import the engine
 from spreadsheet_engine import SpreadsheetEngine
