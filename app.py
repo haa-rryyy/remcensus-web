@@ -815,6 +815,104 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
 # Extract content setting (default:  enabled)
 extract_content = True
 
+
+def fetch_all_drive_files_cached(drive_service, drive_id):
+    """
+    Fetch ALL files from Google Drive recursively and cache them.
+    This function is called once at startup to avoid repeated API calls.
+    """
+    try:
+        logger.info(f"[CACHE] Fetching all files from drive/folder {drive_id}")
+
+        all_items = []
+        folders_to_search = [drive_id]
+        searched_folders = set()
+        folder_count = 0
+
+        logger.info("[CACHE] Starting recursive folder traversal...")
+        while folders_to_search:
+            current_folder = folders_to_search.pop(0)
+
+            if current_folder in searched_folders:
+                continue
+
+            searched_folders.add(current_folder)
+            folder_count += 1
+            logger.info(f"[CACHE] [FOLDER #{folder_count}] Searching: {current_folder}")
+
+            try:
+                query_string = f"'{current_folder}' in parents and trashed=false"
+                resp = (
+                    drive_service.files()
+                    .list(
+                        q=query_string,
+                        spaces="drive",
+                        pageSize=100,
+                        fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)",
+                    )
+                    .execute()
+                )
+
+                items = resp.get("files", [])
+                logger.info(f"[CACHE]   -> Found {len(items)} items")
+
+                for item in items:
+                    name = item.get("name", "UNKNOWN")
+                    mime = item.get("mimeType", "UNKNOWN")
+                    is_folder = mime == "application/vnd.google-apps.folder"
+
+                    if is_folder:
+                        logger.info(f"[CACHE]     [FOLDER] {name}")
+                        folders_to_search.append(item["id"])
+                    else:
+                        logger.info(f"[CACHE]     [FILE] {name}")
+                        all_items.append(item)
+
+            except HttpError as e:
+                logger.warning(f"[CACHE] Error searching folder {current_folder}: {e}")
+                continue
+
+        logger.info(f"[CACHE] Complete: Found {len(all_items)} files total")
+
+        # Normalize datetime strings
+        for item in all_items:
+            if "createdTime" in item:
+                try:
+                    dt = datetime.fromisoformat(
+                        item["createdTime"].replace("Z", "+00:00")
+                    )
+                    item["createdTimeISO"] = dt.isoformat()
+                except Exception as dt_e:
+                    logger.warning(
+                        f"Failed to parse datetime {item['createdTime']}: {dt_e}"
+                    )
+                    item["createdTimeISO"] = item.get("createdTime")
+
+            if "modifiedTime" in item:
+                try:
+                    dt = datetime.fromisoformat(
+                        item["modifiedTime"].replace("Z", "+00:00")
+                    )
+                    item["modifiedTimeISO"] = dt.isoformat()
+                except Exception as dt_e:
+                    logger.warning(
+                        f"Failed to parse datetime {item['modifiedTime']}: {dt_e}"
+                    )
+                    item["modifiedTimeISO"] = item.get("modifiedTime")
+
+        # Sort by modified time
+        all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+
+        return all_items
+
+    except Exception as e:
+        logger.error(
+            f"[CACHE] Unexpected error fetching drive items: {type(e).__name__} - {str(e)}",
+            exc_info=True,
+        )
+        return []
+
+
 # SECURE CONNECTION
 if "init_done" not in st.session_state:
     try:
@@ -1031,103 +1129,6 @@ def match_category(query_lower, folder_map):
 
 
 # --- 6.GOOGLE DRIVE SEARCH WITH IMPROVED SCORING & DATE FILTERING ---
-
-def fetch_all_drive_files_cached(drive_service, drive_id):
-    """
-    Fetch ALL files from Google Drive recursively and cache them.
-    This function is called once at startup to avoid repeated API calls.
-    """
-    try:
-        logger.info(f"[CACHE] Fetching all files from drive/folder {drive_id}")
-
-        all_items = []
-        folders_to_search = [drive_id]
-        searched_folders = set()
-        folder_count = 0
-
-        logger.info("[CACHE] Starting recursive folder traversal...")
-        while folders_to_search:
-            current_folder = folders_to_search.pop(0)
-
-            if current_folder in searched_folders:
-                continue
-
-            searched_folders.add(current_folder)
-            folder_count += 1
-            logger.info(f"[CACHE] [FOLDER #{folder_count}] Searching: {current_folder}")
-
-            try:
-                query_string = f"'{current_folder}' in parents and trashed=false"
-                resp = (
-                    drive_service.files()
-                    .list(
-                        q=query_string,
-                        spaces="drive",
-                        pageSize=100,
-                        fields="files(id,name,createdTime,modifiedTime,owners(displayName,emailAddress),mimeType,webViewLink,size,description)",
-                    )
-                    .execute()
-                )
-
-                items = resp.get("files", [])
-                logger.info(f"[CACHE]   -> Found {len(items)} items")
-
-                for item in items:
-                    name = item.get("name", "UNKNOWN")
-                    mime = item.get("mimeType", "UNKNOWN")
-                    is_folder = mime == "application/vnd.google-apps.folder"
-
-                    if is_folder:
-                        logger.info(f"[CACHE]     [FOLDER] {name}")
-                        folders_to_search.append(item["id"])
-                    else:
-                        logger.info(f"[CACHE]     [FILE] {name}")
-                        all_items.append(item)
-
-            except HttpError as e:
-                logger.warning(f"[CACHE] Error searching folder {current_folder}: {e}")
-                continue
-
-        logger.info(f"[CACHE] Complete: Found {len(all_items)} files total")
-
-        # Normalize datetime strings
-        for item in all_items:
-            if "createdTime" in item:
-                try:
-                    dt = datetime.fromisoformat(
-                        item["createdTime"].replace("Z", "+00:00")
-                    )
-                    item["createdTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['createdTime']}: {dt_e}"
-                    )
-                    item["createdTimeISO"] = item.get("createdTime")
-
-            if "modifiedTime" in item:
-                try:
-                    dt = datetime.fromisoformat(
-                        item["modifiedTime"].replace("Z", "+00:00")
-                    )
-                    item["modifiedTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['modifiedTime']}: {dt_e}"
-                    )
-                    item["modifiedTimeISO"] = item.get("modifiedTime")
-
-        # Sort by modified time
-        all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
-
-        return all_items
-
-    except Exception as e:
-        logger.error(
-            f"[CACHE] Unexpected error fetching drive items: {type(e).__name__} - {str(e)}",
-            exc_info=True,
-        )
-        return []
-
 
 def fetch_drive_recent_files(
     drive_id, search_query=None, score_threshold=SCORE_THRESHOLD
