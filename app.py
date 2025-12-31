@@ -100,11 +100,17 @@ st.markdown("""
         padding: 1rem 1.5rem;
         font-size: 1rem;
         transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
     
     .stTextInput > div > div > input:focus {
         border-color: #16a8b6;
-        box-shadow: 0 0 0 3px rgba(22, 168, 182, 0.1);
+        box-shadow: 0 0 0 3px rgba(22, 168, 182, 0.1), 0 4px 12px rgba(0,0,0,0.08);
+        outline: none;
+    }
+    
+    .stTextInput > div > div > input::placeholder {
+        color: #999;
     }
     
     /* Action buttons styling */
@@ -176,6 +182,19 @@ st.markdown("""
         font-size: 0.95rem;
     }
     
+    /* Sidebar navigation links */
+    [data-testid="stSidebar"] .stMarkdown p {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        margin: 0.25rem 0;
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown p:hover {
+        background-color: rgba(22, 168, 182, 0.1);
+    }
+    
     /* Button styling */
     .stButton > button {
         border-radius: 25px;
@@ -229,6 +248,45 @@ st.markdown("""
         margin: 2rem 0;
         border: none;
         border-top: 1px solid #e0e0e0;
+    }
+    
+    /* Feature highlights */
+    .feature-highlight {
+        padding: 1.5rem;
+        border-radius: 12px;
+        background: #f8f9fa;
+        border: 1px solid #e8e9ea;
+        transition: all 0.3s ease;
+    }
+    
+    .feature-highlight:hover {
+        background: #ffffff;
+        border-color: #16a8b6;
+        box-shadow: 0 4px 12px rgba(22, 168, 182, 0.1);
+    }
+    
+    /* Loading spinner */
+    .stSpinner > div {
+        border-top-color: #16a8b6 !important;
+    }
+    
+    /* Success/info messages */
+    .stSuccess {
+        background-color: rgba(22, 168, 182, 0.1);
+        border-radius: 8px;
+        border-left: 4px solid #16a8b6;
+    }
+    
+    /* Warning messages */
+    .stWarning {
+        border-radius: 8px;
+        border-left: 4px solid #ffa726;
+    }
+    
+    /* Error messages */
+    .stError {
+        border-radius: 8px;
+        border-left: 4px solid #ef5350;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1207,6 +1265,9 @@ if not query:
         <div class="action-button">Generate an 'Uzzle</div>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Filter options section
+    st.markdown("<div style='text-align: center; margin: 1rem 0; color: #666; font-size: 0.9rem;'>✨ Features: AI-Powered • Date Filtering • Smart Categorization • Content Extraction</div>", unsafe_allow_html=True)
     
     # Add some feature highlights
     st.markdown("---")
