@@ -1324,10 +1324,12 @@ elif st.session_state.current_view == "remsearch":
     
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     
-    # Search bar
-    query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="remsearch_input")
+    # Search bar with form to prevent triggering on every keystroke
+    with st.form(key="remsearch_form", clear_on_submit=False):
+        query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="remsearch_input")
+        submit_button = st.form_submit_button("🔍 Search", use_container_width=False)
 
-    if query:
+    if query and submit_button:
         with st.spinner("🌀 Triage in progress..."):
             search_process = {
                 "query": query,
@@ -1612,13 +1614,16 @@ elif st.session_state.current_view == "rinking_names":
         st.subheader("Search 'Rinking Names")
         st.write("Search for members by 'rinking name.")
 
-        search_query = st.text_input(
-            "Enter 'rinking name:",
-            placeholder="e.g., 'Tree of Life'",
-            key="rinking_search_query",
-        )
+        # Use form to prevent search on every keystroke
+        with st.form(key="rinking_search_form", clear_on_submit=False):
+            search_query = st.text_input(
+                "Enter 'rinking name:",
+                placeholder="e.g., 'Tree of Life'",
+                key="rinking_search_query",
+            )
+            submit_button = st.form_submit_button("🔍 Search")
 
-        if search_query:
+        if search_query and submit_button:
             with st.spinner("🔍 Searching... "):
                 results = engine.search(search_query, "'rinking Name", min_score=0.50)
 
