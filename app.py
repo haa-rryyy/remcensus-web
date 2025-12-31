@@ -835,8 +835,18 @@ if "init_done" not in st.session_state:
 
         if st.session_state.drive_service:
             logger.info("Drive service initialized successfully")
+            
+            # Cache all Drive files at startup to avoid repeated API calls
+            logger.info("Caching Google Drive files...")
+            with st.spinner("📥 Loading Google Drive files into cache..."):
+                st.session_state.drive_files_cache = fetch_all_drive_files_cached(
+                    st.session_state.drive_service,
+                    "10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9"  # Main drive folder ID
+                )
+            logger.info(f"✅ Cached {len(st.session_state.drive_files_cache)} files from Drive")
         else:
             logger.warning("Drive service initialization returned None")
+            st.session_state.drive_files_cache = []
 
         st.session_state.init_done = True
         logger.info("Session initialization completed")
@@ -849,6 +859,9 @@ if "init_done" not in st.session_state:
 # Initialize navigation state
 if "current_view" not in st.session_state:
     st.session_state.current_view = "home"
+
+# Developer mode (can be toggled via environment variable or config)
+dev_mode = False  # Set to True to enable developer debugging features
 
 
 # --- 2.LINGUISTIC TRANSFORMATION ENGINE ---
@@ -1018,26 +1031,21 @@ def match_category(query_lower, folder_map):
 
 
 # --- 6.GOOGLE DRIVE SEARCH WITH IMPROVED SCORING & DATE FILTERING ---
-def fetch_drive_recent_files(
-    drive_id, search_query=None, score_threshold=SCORE_THRESHOLD
-):
-    """
-    Fetch files with intelligent scoring based on filename matches and date filtering.
-    """
-    drive_service = st.session_state.get("drive_service")
-    if drive_service is None:
-        logger.error("Drive service is None in fetch_drive_recent_files")
-        raise RuntimeError("Drive service not initialized.")
 
+def fetch_all_drive_files_cached(drive_service, drive_id):
+    """
+    Fetch ALL files from Google Drive recursively and cache them.
+    This function is called once at startup to avoid repeated API calls.
+    """
     try:
-        logger.info(f"Fetching files from drive/folder {drive_id}")
+        logger.info(f"[CACHE] Fetching all files from drive/folder {drive_id}")
 
         all_items = []
         folders_to_search = [drive_id]
         searched_folders = set()
         folder_count = 0
 
-        logger.info("Starting recursive folder traversal...")
+        logger.info("[CACHE] Starting recursive folder traversal...")
         while folders_to_search:
             current_folder = folders_to_search.pop(0)
 
@@ -1046,7 +1054,7 @@ def fetch_drive_recent_files(
 
             searched_folders.add(current_folder)
             folder_count += 1
-            logger.info(f"[FOLDER #{folder_count}] Searching:   {current_folder}")
+            logger.info(f"[CACHE] [FOLDER #{folder_count}] Searching: {current_folder}")
 
             try:
                 query_string = f"'{current_folder}' in parents and trashed=false"
@@ -1062,7 +1070,7 @@ def fetch_drive_recent_files(
                 )
 
                 items = resp.get("files", [])
-                logger.info(f"  -> Found {len(items)} items")
+                logger.info(f"[CACHE]   -> Found {len(items)} items")
 
                 for item in items:
                     name = item.get("name", "UNKNOWN")
@@ -1070,19 +1078,79 @@ def fetch_drive_recent_files(
                     is_folder = mime == "application/vnd.google-apps.folder"
 
                     if is_folder:
-                        logger.info(f"    [FOLDER] {name}")
+                        logger.info(f"[CACHE]     [FOLDER] {name}")
                         folders_to_search.append(item["id"])
                     else:
-                        logger.info(f"    [FILE] {name}")
+                        logger.info(f"[CACHE]     [FILE] {name}")
                         all_items.append(item)
 
             except HttpError as e:
-                logger.warning(f"Error searching folder {current_folder}: {e}")
+                logger.warning(f"[CACHE] Error searching folder {current_folder}: {e}")
                 continue
 
-        logger.info(f"Search complete:   Found {len(all_items)} files")
+        logger.info(f"[CACHE] Complete: Found {len(all_items)} files total")
 
-        all_items.sort(key=lambda x: x.get("modifiedTime", ""))
+        # Normalize datetime strings
+        for item in all_items:
+            if "createdTime" in item:
+                try:
+                    dt = datetime.fromisoformat(
+                        item["createdTime"].replace("Z", "+00:00")
+                    )
+                    item["createdTimeISO"] = dt.isoformat()
+                except Exception as dt_e:
+                    logger.warning(
+                        f"Failed to parse datetime {item['createdTime']}: {dt_e}"
+                    )
+                    item["createdTimeISO"] = item.get("createdTime")
+
+            if "modifiedTime" in item:
+                try:
+                    dt = datetime.fromisoformat(
+                        item["modifiedTime"].replace("Z", "+00:00")
+                    )
+                    item["modifiedTimeISO"] = dt.isoformat()
+                except Exception as dt_e:
+                    logger.warning(
+                        f"Failed to parse datetime {item['modifiedTime']}: {dt_e}"
+                    )
+                    item["modifiedTimeISO"] = item.get("modifiedTime")
+
+        # Sort by modified time
+        all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+
+        return all_items
+
+    except Exception as e:
+        logger.error(
+            f"[CACHE] Unexpected error fetching drive items: {type(e).__name__} - {str(e)}",
+            exc_info=True,
+        )
+        return []
+
+
+def fetch_drive_recent_files(
+    drive_id, search_query=None, score_threshold=SCORE_THRESHOLD
+):
+    """
+    Fetch files with intelligent scoring based on filename matches and date filtering.
+    Now uses cached file list instead of making API calls.
+    """
+    try:
+        logger.info(f"Searching cached files with query: {search_query}")
+
+        # Use cached files instead of fetching from API
+        if "drive_files_cache" not in st.session_state:
+            logger.warning("Drive cache not available, falling back to live fetch")
+            # Fallback to live fetch if cache is not available
+            drive_service = st.session_state.get("drive_service")
+            if drive_service is None:
+                logger.error("Drive service is None in fetch_drive_recent_files")
+                raise RuntimeError("Drive service not initialized.")
+            all_items = fetch_all_drive_files_cached(drive_service, drive_id)
+        else:
+            logger.info(f"Using cached files: {len(st.session_state.drive_files_cache)} files available")
+            all_items = st.session_state.drive_files_cache.copy()
 
         # Extract date constraints from query
         date_constraints = None
@@ -1182,46 +1250,13 @@ def fetch_drive_recent_files(
                 items = [item for score, item in scored_items[:3]]
 
         else:
-            all_items.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
             items = all_items[:5]
-
-        # Normalize datetime strings
-        for item in items:
-            if "createdTime" in item:
-                try:
-                    dt = datetime.fromisoformat(
-                        item["createdTime"].replace("Z", "+00:00")
-                    )
-                    item["createdTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['createdTime']}: {dt_e}"
-                    )
-                    item["createdTimeISO"] = item.get("createdTime")
-
-            if "modifiedTime" in item:
-                try:
-                    dt = datetime.fromisoformat(
-                        item["modifiedTime"].replace("Z", "+00:00")
-                    )
-                    item["modifiedTimeISO"] = dt.isoformat()
-                except Exception as dt_e:
-                    logger.warning(
-                        f"Failed to parse datetime {item['modifiedTime']}:   {dt_e}"
-                    )
-                    item["modifiedTimeISO"] = item.get("modifiedTime")
 
         return items
 
-    except HttpError as e:
-        logger.error(f"HTTP error fetching drive items: {e.resp.status}")
-        raise
-    except GoogleAPICallError as e:
-        logger.error(f"Google API error fetching drive items: {str(e)}")
-        raise
     except Exception as e:
         logger.error(
-            f"Unexpected error fetching drive items: {type(e).__name__} - {str(e)}",
+            f"Unexpected error in search: {type(e).__name__} - {str(e)}",
             exc_info=True,
         )
         raise
@@ -1324,10 +1359,12 @@ elif st.session_state.current_view == "remsearch":
     
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     
-    # Search bar
-    query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="remsearch_input")
+    # Search bar with form to prevent triggering on every keystroke
+    with st.form(key="remsearch_form", clear_on_submit=False):
+        query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="remsearch_input")
+        submit_button = st.form_submit_button("🔍 Search", use_container_width=False)
 
-    if query:
+    if query and submit_button:
         with st.spinner("🌀 Triage in progress..."):
             search_process = {
                 "query": query,
@@ -1612,13 +1649,16 @@ elif st.session_state.current_view == "rinking_names":
         st.subheader("Search 'Rinking Names")
         st.write("Search for members by 'rinking name.")
 
-        search_query = st.text_input(
-            "Enter 'rinking name:",
-            placeholder="e.g., 'Tree of Life'",
-            key="rinking_search_query",
-        )
+        # Use form to prevent search on every keystroke
+        with st.form(key="rinking_search_form", clear_on_submit=False):
+            search_query = st.text_input(
+                "Enter 'rinking name:",
+                placeholder="e.g., 'Tree of Life'",
+                key="rinking_search_query",
+            )
+            submit_button = st.form_submit_button("🔍 Search")
 
-        if search_query:
+        if search_query and submit_button:
             with st.spinner("🔍 Searching... "):
                 results = engine.search(search_query, "'rinking Name", min_score=0.50)
 
@@ -1727,13 +1767,16 @@ elif st.session_state.current_view == "find_layer":
             st.subheader("Search by Full Name")
             st.write("Find a member by their full name.")
 
-            lookup_query = st.text_input(
-                "Enter full name:",
-                placeholder="e.g., 'Harry Foley'",
-                key="fullname_lookup_query",
-            )
+            # Use form to prevent search on every keystroke
+            with st.form(key="fullname_lookup_form", clear_on_submit=False):
+                lookup_query = st.text_input(
+                    "Enter full name:",
+                    placeholder="e.g., 'Harry Foley'",
+                    key="fullname_lookup_query",
+                )
+                submit_button = st.form_submit_button("🔍 Search")
 
-            if lookup_query:
+            if lookup_query and submit_button:
                 with st.spinner("🔍 Searching..."):
                     results = engine.search(lookup_query, "Full Name", min_score=0.50)
 

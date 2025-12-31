@@ -4,3 +4,14 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f8f9fa"
 textColor = "#1a1a1a"
 font = "sans serif"
+
+[server]
+# Enable file watcher to use polling (can help with performance)
+fileWatcherType = "auto"
+# Reduce the frequency of reruns from input changes
+# This prevents the app from rerunning on every keystroke
+runOnSave = true
+
+[browser]
+# Disable automatic gathering of usage stats
+gatherUsageStats = false
