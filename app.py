@@ -812,28 +812,8 @@ def extract_file_content(drive_service, file_id, mime_type, file_name):
         )
         return "", False, f"Unexpected error:  {str(e)}"
 
-
-# Sidebar navigation
-st.sidebar.markdown("### 🦁 'Remcensus")
-st.sidebar.markdown("Protocol Discovery System")
-st.sidebar.markdown("---")
-
-# Navigation sections
-st.sidebar.markdown("### Navigation")
-st.sidebar.markdown("🏠 Home")
-st.sidebar.markdown("📜 History")
-st.sidebar.markdown("📚 Library")
-st.sidebar.markdown("---")
-
-# Settings section
-st.sidebar.markdown("### Settings")
-extract_content = st.sidebar.checkbox(
-    "Extract file content", value=True
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛠️ Developer")
-dev_mode = st.sidebar.checkbox("Dev Mode", value=False)
+# Extract content setting (default:  enabled)
+extract_content = True
 
 # SECURE CONNECTION
 if "init_done" not in st.session_state:
