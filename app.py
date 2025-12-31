@@ -1181,18 +1181,51 @@ def fetch_drive_recent_files(
             ]
             scored_items = []
 
+            # [INSERT PART 1 HERE: Define the map and find matches]
+            # Manual Keyword Overrides (Patch for specific documents)
+            keyword_map = {
+                "lily": ["REMIER_Trial"],  # If query has 'lily', boost 'REMIER_Trial'
+                "schmeer": ["REMIER_Trial"],
+                "gravity": ["Gravity_Well"],
+                "cpc": ["Spartan_Supremacy"],
+                "boat": ["Spartan_Supremacy"],
+            }
+            
+            # Check for keywords in query
+            boost_files = []
+            if search_query:
+                for keyword, target_files in keyword_map.items():
+                    if keyword in search_query.lower():
+                        boost_files.extend(target_files)
+            # [END PART 1]
+            
             logger.info(
                 f"Scoring {len(all_items)} files with improved filename-first strategy"
             )
 
             for item in all_items:
                 name_lower = item.get("name", "").lower()
+               
+                # [INSERT PART 2 HERE: Apply the boost inside the loop]
+                # Apply Manual Boost
+                for boost_name in boost_files:
+                    if boost_name.lower() in name_lower:
+                        # Massive boost to ensure it's picked
+                        # We use a temporary variable so we don't mess up the logic below
+                        pass 
+                
                 desc_lower = (
                     item.get("description", "").lower()
                     if item.get("description")
                     else ""
                 )
                 score = 0
+                
+                # [ACTUAL BOOST APPLICATION]
+                # Add this right here, before the other checks:
+                for boost_name in boost_files:
+                    if boost_name.lower() in name_lower:
+                        score += 100
 
                 # **MASSIVE BOOST FOR FILENAME MATCHES** (v21 improvement)
                 for term in search_terms:
@@ -1246,9 +1279,10 @@ def fetch_drive_recent_files(
 
             if not items:
                 logger.warning(
-                    f"No items met threshold of {score_threshold}, returning top 3 by score"
+                    f"No items met threshold of {score_threshold}. Returning empty list to avoid polluting context."
                 )
-                items = [item for score, item in scored_items[:3]]
+                # Return empty so we rely purely on Pinecone for this query
+                items = []
 
         else:
             items = all_items[:5]
@@ -1455,37 +1489,41 @@ elif st.session_state.current_view == "remsearch":
                                     }
                                 )
     
-                            # Extract content from first file if enabled
+                            # Extract content from TOP 3 files if enabled
                             if extract_content and len(drive_files) > 0:
-                                logger.info("Extracting content from first file...")
-    
-                                first_file = drive_files[0]
-                                file_id = first_file.get("id")
-                                file_name = first_file.get("name")
-                                mime_type = first_file.get("mimeType")
-    
-                                content, success, error = extract_file_content(
-                                    st.session_state.drive_service,
-                                    file_id,
-                                    mime_type,
-                                    file_name,
-                                )
-    
-                                if success:
-                                    logger.info(f"Successfully extracted {file_name}")
-                                    search_process["extracted_content"].append(
-                                        {
-                                            "filename": file_name,
-                                            "mime_type": mime_type,
-                                            "content_length": len(content),
-                                        }
+                                logger.info("Extracting content from top files...")
+                            
+                                # Process up to 3 files
+                                files_to_process = drive_files[:3] 
+                            
+                                for i, file_obj in enumerate(files_to_process):
+                                    file_id = file_obj.get("id")
+                                    file_name = file_obj.get("name")
+                                    mime_type = file_obj.get("mimeType")
+
+                                    content, success, error = extract_file_content(
+                                        st.session_state.drive_service,
+                                        file_id,
+                                        mime_type,
+                                        file_name,
                                     )
-                                    context_text += f"\n\n--- Content from {file_name} ---\n{content[: 10000]}\n"
-                                else:
-                                    logger.error(f"Failed to extract {file_name}: {error}")
-                                    search_process["errors"].append(
-                                        f"Content extraction failed: {error}"
-                                    )
+
+                                    if success:
+                                        logger.info(f"Successfully extracted {file_name}")
+                                        search_process["extracted_content"].append(
+                                            {
+                                                "filename": file_name,
+                                                "mime_type": mime_type,
+                                                "content_length": len(content),
+                                            }
+                                        )
+                                        # Append to context with a clear header
+                                        context_text += f"\n\n--- Source {i+1}: {file_name} ---\n{content[: 8000]}\n" 
+                                    else:
+                                        logger.error(f"Failed to extract {file_name}: {error}")
+                                        search_process["errors"].append(
+                                            f"Content extraction failed for {file_name}: {error}"
+                                        )
     
                             # Add metadata (hidden from UI but in context)
                             context_text += "\n---\nGoogle Drive Files Found:\n"
@@ -1506,20 +1544,17 @@ elif st.session_state.current_view == "remsearch":
     
                 # Step 3: Generate response with CLEAN context
                 logger.info("Step 3: Preparing context for LLM...")
-    
-                # Extract ONLY content from the primary (first) file
-                # Don't include metadata or other files' content
-                primary_content_start = context_text.find("--- Content from")
-                if primary_content_start != -1:
-                    # Find the end of first file content (before the metadata section)
-                    metadata_start = context_text.find(
-                        "\n---\nGoogle Drive Files Found:", primary_content_start
-                    )
-                    if metadata_start != -1:
-                        context_for_llm = context_text[primary_content_start:metadata_start]
-                    else:
-                        context_for_llm = context_text[primary_content_start:]
+
+                # We want to KEEP the Pinecone results (which are at the start) 
+                # AND the extracted file content, but REMOVE the file list metadata at the end.
+            
+                metadata_start = context_text.find("\n---\nGoogle Drive Files Found:")
+            
+                if metadata_start != -1:
+                    # Keep everything up to the metadata list
+                    context_for_llm = context_text[:metadata_start]
                 else:
+                    # No metadata section found, use everything
                     context_for_llm = context_text
     
                 # Remove any metadata markers
