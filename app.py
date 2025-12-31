@@ -1016,7 +1016,6 @@ SYSTEM_PROMPT = (
     "   - Replace '4.' with 'BJ.'\n"
     "   - Replace '8.' with 'TK.'\n"
     "   - Replace '10.' with 'IJ.'\n"
-    "   - ENSURE that 'BJ.', 'TK.', and 'IJ.' are always placed on a NEW LINE as distinct list items. Do not merge them into the previous line.\n"
     "7.Format: Direct answers only. No narrative, actions, or roleplay."
 )
 
