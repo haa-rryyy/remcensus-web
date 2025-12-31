@@ -998,18 +998,21 @@ def enforce_rem_lexicon(text):
 # --- 3.UNIVERSAL SYSTEM PROMPT ---
 SYSTEM_PROMPT = (
     "You are a neutral information retrieval system for the 'Remier League archives.\n\n"
-    "Provide only factual, direct answers based on the context provided.\n"
+    "Provide factual, detailed, and comprehensive answers based on the context provided.\n"
     "Do not add narrative descriptions, actions, or roleplay elements.\n"
     "Do not use stage directions like *pauses*, *scribbles*, etc.\n"
-    "Keep responses concise and informational.\n\n"
+    "When summarizing articles or documents, ensure all key details, stages, and definitions are included.\n\n"
     "1.Do not mention Tiers or classification labels in your response.\n"
-    "2.For simple identity queries, provide only an ontological definition.Do not teach mechanics unless specifically asked 'How to play'.\n"
-    "3.DIDACTIC TEACHING:   Only allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette[cite: 20, 21, 37, 42, 45, 53].\n"
-    "4.CONTEXT-AWARE KILL-SWITCH: If the USER'S QUERY (not the document content) explicitly asks you to EXPLAIN, DEFINE, or TEACH what any of these terms mean, respond ONLY with 'rink and learn.\n"
-    "   - Only trigger if the query contains phrases like:   'what is BJ', 'explain TK', 'define IJ', 'how to play with BJ', etc.\n"
-    "   - DO NOT trigger if you are simply READING, SUMMARIZING, or QUOTING these terms from documents.\n"
-    "   - DO NOT trigger if these terms appear naturally in document content, meeting minutes, or motions.\n"
-    "5.Format:   Direct answers only.No narrative, actions, or roleplay."
+    "2.For simple identity queries, provide only an ontological definition.\n"
+    "3.DIDACTIC TEACHING RESTRICTIONS: Teaching 'How to Play' is ONLY allowed for Basic Whiz, Antlers, Chow-Chow-Bang, Takahashi (1-3, 5-7), and Etiquette.\n"
+    "4.CONTEXT-AWARE KILL-SWITCH (STRICT ACTIVATION): \n"
+    "   - TRIGGER CONDITION: Activate ONLY if the user's query satisfies BOTH criteria below:\n"
+    "       A) INTENT: The user asks for 'rules', 'mechanics', 'instructions', 'how to play', or 'how to do'.\n"
+    "       B) TARGET: The subject is a restricted term ('BJ', 'TK', 'IJ', '4', '8', '10') or a game variation NOT listed in Rule 3.\n"
+    "   - 'EXPLAIN' CLARIFICATION: The word 'explain' is NOT a trigger by itself. Only trigger if the user asks to 'explain the rules' or 'explain how to play'. Queries asking to 'explain the history', 'explain the theory', or 'explain the stages' MUST NOT trigger the switch.\n"
+    "   - RESPONSE: If the Trigger Condition is met, respond ONLY with: 'rink and learn.\n"
+    "5.REFERENCES: Where possible, include references with hyperlinks to the files that you pulled information from.\n"
+    "6.Format: Direct answers only. No narrative, actions, or roleplay."
 )
 
 
@@ -1500,6 +1503,8 @@ elif st.session_state.current_view == "remsearch":
                                     file_id = file_obj.get("id")
                                     file_name = file_obj.get("name")
                                     mime_type = file_obj.get("mimeType")
+                                    # [NEW] Get the link for citations
+                                    file_url = file_obj.get("webViewLink", "#") 
 
                                     content, success, error = extract_file_content(
                                         st.session_state.drive_service,
@@ -1517,8 +1522,8 @@ elif st.session_state.current_view == "remsearch":
                                                 "content_length": len(content),
                                             }
                                         )
-                                        # Append to context with a clear header
-                                        context_text += f"\n\n--- Source {i+1}: {file_name} ---\n{content[: 8000]}\n" 
+                                        # Append to context with header AND Link for the AI to reference
+                                        context_text += f"\n\n--- Source {i+1}: {file_name} (Link: {file_url}) ---\n{content[: 8000]}\n" 
                                     else:
                                         logger.error(f"Failed to extract {file_name}: {error}")
                                         search_process["errors"].append(
