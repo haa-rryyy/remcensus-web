@@ -866,6 +866,10 @@ if "init_done" not in st.session_state:
         st.error(f"🔐 Security Error: {e}")
         st.stop()
 
+# Initialize navigation state
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "home"
+
 
 # --- 2.LINGUISTIC TRANSFORMATION ENGINE ---
 def enforce_rem_lexicon(text):
@@ -1244,303 +1248,10 @@ def fetch_drive_recent_files(
 
 
 # --- 7. MAIN INTERFACE ---
-# Homepage branding
-st.markdown("""
-<div class="remcensus-brand">
-    <div class="remcensus-title">🦁 'Remcensus</div>
-    <div class="remcensus-tagline">Thinking is 'Rinking</div>
-</div>
-""", unsafe_allow_html=True)
 
-# Search bar
-query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="main_search")
-
-# Quick action buttons
-if not query:
-    st.markdown("""
-    <div class="action-buttons">
-        <div class="action-button">Ask the 'Remsearch</div>
-        <div class="action-button">Search for 'Rinking Names</div>
-        <div class="action-button">Find a 'Layer</div>
-        <div class="action-button">Generate an 'Uzzle</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Filter options section
-    st.markdown("<div style='text-align: center; margin: 1rem 0; color: #666; font-size: 0.9rem;'>✨ Features: AI-Powered • Date Filtering • Smart Categorization • Content Extraction</div>", unsafe_allow_html=True)
-    
-    # Add some feature highlights
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("### 📚 Protocol Archives")
-        st.markdown("Search through comprehensive 'Remier League documentation")
-    with col2:
-        st.markdown("### 🔍 Smart Search")
-        st.markdown("AI-powered search with context and date filtering")
-    with col3:
-        st.markdown("### 📊 Registry Access")
-        st.markdown("Quick lookup of members and 'rinking names")
-
-if query:
-    with st.spinner("🌀 Triage in progress..."):
-        search_process = {
-            "query": query,
-            "timestamp": datetime.now().isoformat(),
-            "category_detection": None,
-            "date_constraints": None,
-            "pinecone_results": [],
-            "drive_results": [],
-            "extracted_content": [],
-            "llm_engine_used": None,
-            "errors": [],
-        }
-
-        # Clear any stale session cache
-        if "last_query" in st.session_state and st.session_state.last_query == query:
-            logger.info("Query cache detected - forcing refresh...")
-        st.session_state.last_query = query
-
-        try:
-            logger.info(f"Processing query: {query[: 100]}...")
-
-            # Step 1: Pinecone retrieval
-            logger.info("Step 1: Running Pinecone embedding and retrieval...")
-            result = st.session_state.google_client.models.embed_content(
-                model="text-embedding-004", contents=query
-            )
-            search_results = st.session_state.pc_index.query(
-                vector=result.embeddings[0].values, top_k=5, include_metadata=True
-            )
-            context_text = ""
-
-            for match in search_results["matches"]:
-                meta = match["metadata"]
-                context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
-                search_process["pinecone_results"].append(
-                    {
-                        "source": meta.get("source", "Unknown"),
-                        "score": match.get("score", "N/A"),
-                    }
-                )
-
-            logger.info(f"Pinecone returned {len(search_results['matches'])} results")
-
-            # Step 2: Google Drive search (background, with date filtering)
-            logger.info("Step 2: Fetching from Google Drive (background)...")
-            try:
-                if st.session_state.drive_service is None:
-                    logger.warning("Drive service is None - skipping Drive search")
-                    search_process["errors"].append("Drive service not initialized")
-                else:
-                    logger.info("Extracting date constraints from query...")
-                    date_constraints = extract_date_constraints_from_query(query)
-                    search_process["date_constraints"] = {
-                        k: str(v) if isinstance(v, datetime) else v
-                        for k, v in date_constraints.items()
-                    }
-
-                    logger.info("Detecting category intent from query...")
-                    category_match, subcategory_match, category_confidence = (
-                        match_category(query.lower(), RACRL_FOLDER_MAP)
-                    )
-                    search_process["category_detection"] = {
-                        "category": category_match,
-                        "subcategory": subcategory_match,
-                        "confidence": category_confidence,
-                    }
-
-                    logger.info(
-                        "Searching Drive with threshold-based filtering and date constraints..."
-                    )
-                    drive_files = fetch_drive_recent_files(
-                        "10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9",
-                        search_query=query,
-                        score_threshold=SCORE_THRESHOLD,
-                    )
-
-                    logger.info(f"Found {len(drive_files)} files")
-
-                    if drive_files:
-                        for idx, f in enumerate(drive_files):
-                            search_process["drive_results"].append(
-                                {
-                                    "rank": idx + 1,
-                                    "name": f.get("name"),
-                                    "mime_type": f.get("mimeType"),
-                                    "modified": f.get("modifiedTimeISO"),
-                                }
-                            )
-
-                        # Extract content from first file if enabled
-                        if extract_content and len(drive_files) > 0:
-                            logger.info("Extracting content from first file...")
-
-                            first_file = drive_files[0]
-                            file_id = first_file.get("id")
-                            file_name = first_file.get("name")
-                            mime_type = first_file.get("mimeType")
-
-                            content, success, error = extract_file_content(
-                                st.session_state.drive_service,
-                                file_id,
-                                mime_type,
-                                file_name,
-                            )
-
-                            if success:
-                                logger.info(f"Successfully extracted {file_name}")
-                                search_process["extracted_content"].append(
-                                    {
-                                        "filename": file_name,
-                                        "mime_type": mime_type,
-                                        "content_length": len(content),
-                                    }
-                                )
-                                context_text += f"\n\n--- Content from {file_name} ---\n{content[: 10000]}\n"
-                            else:
-                                logger.error(f"Failed to extract {file_name}: {error}")
-                                search_process["errors"].append(
-                                    f"Content extraction failed: {error}"
-                                )
-
-                        # Add metadata (hidden from UI but in context)
-                        context_text += "\n---\nGoogle Drive Files Found:\n"
-                        for f in drive_files:
-                            context_text += f"- {f.get('name')} (Modified: {f.get('modifiedTimeISO')})\n"
-
-                    else:
-                        logger.warning("No files found in Drive search")
-                        search_process["errors"].append(
-                            "No files found in Drive search"
-                        )
-
-            except Exception as e_drive:
-                logger.error(
-                    f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}"
-                )
-                search_process["errors"].append(f"Drive search error: {str(e_drive)}")
-
-            # Step 3: Generate response with CLEAN context
-            logger.info("Step 3: Preparing context for LLM...")
-
-            # Extract ONLY content from the primary (first) file
-            # Don't include metadata or other files' content
-            primary_content_start = context_text.find("--- Content from")
-            if primary_content_start != -1:
-                # Find the end of first file content (before the metadata section)
-                metadata_start = context_text.find(
-                    "\n---\nGoogle Drive Files Found:", primary_content_start
-                )
-                if metadata_start != -1:
-                    context_for_llm = context_text[primary_content_start:metadata_start]
-                else:
-                    context_for_llm = context_text[primary_content_start:]
-            else:
-                context_for_llm = context_text
-
-            # Remove any metadata markers
-            context_for_llm = re.sub(
-                r"\n---\nGoogle Drive Files Found: .*",
-                "",
-                context_for_llm,
-                flags=re.DOTALL,
-            )
-
-            logger.info(
-                f"Context sent to LLM: {len(context_for_llm)} chars (primary file only)"
-            )
-
-            logger.info("Step 3: Generating response from LLM...")
-            raw_text, engine_used, logs = generate_response(context_for_llm, query)
-            search_process["llm_engine_used"] = engine_used
-            final_answer = enforce_rem_lexicon(raw_text)
-
-            # Display result in a card
-            st.markdown(f"""
-            <div class="result-card">
-                {final_answer}
-            </div>
-            """, unsafe_allow_html=True)
-            st.caption(f"🤖 Generated via: {engine_used}")
-
-            logger.info(f"Query processing completed. Engine: {engine_used}")
-
-            # Developer mode only
-            if dev_mode:
-                with st.expander("🔍 DEVELOPER MODE - Search Analysis"):
-                    st.markdown("### Search Process")
-                    st.write(f"**Query:** {search_process['query']}")
-                    st.write(f"**Timestamp:** {search_process['timestamp']}")
-
-                    if search_process["date_constraints"]:
-                        st.write("**Date Constraints:**")
-                        for key, value in search_process["date_constraints"].items():
-                            if value:
-                                st.write(f"  - {key}: {value}")
-
-                    if search_process["category_detection"]:
-                        st.write(
-                            f"**Category Detected:** {search_process['category_detection']['category']}"
-                        )
-                        st.write(
-                            f"**Subcategory:** {search_process['category_detection']['subcategory']}"
-                        )
-
-                    if search_process["drive_results"]:
-                        st.markdown("#### Files Found")
-                        for result in search_process["drive_results"]:
-                            st.write(
-                                f"- **{result['name']}** ({result['mime_type']}, Modified:  {result.get('modified', 'N/A')})"
-                            )
-
-                    if search_process["extracted_content"]:
-                        st.markdown("#### Extracted Content")
-                        for content in search_process["extracted_content"]:
-                            st.write(
-                                f"- **{content['filename']}** ({content['content_length']} chars)"
-                            )
-
-                    if search_process["errors"]:
-                        st.markdown("#### Errors")
-                        for error in search_process["errors"]:
-                            st.error(error)
-
-                    st.markdown("#### Export Data")
-                    search_json = json.dumps(search_process, indent=2)
-                    st.download_button(
-                        label="📥 Download Search Process JSON",
-                        data=search_json,
-                        file_name=f"search_process_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json",
-                    )
-
-        except Exception as e:
-            logger.error(
-                f"Critical error:  {type(e).__name__} - {str(e)}", exc_info=True
-            )
-            search_process["errors"].append(f"Critical error: {str(e)}")
-
-            st.error(f"⚠️ Error processing query: {str(e)}")
-
-            if dev_mode:
-                with st.expander("🔴 Error Details"):
-                    st.write(f"**Error Type:** {type(e).__name__}")
-                    st.write(f"**Message:** {str(e)}")
-                    st.code(traceback.format_exc())
-
-logger.info("Application render completed")
-
-
-# --- 8.  SPREADSHEET ANALYSIS ENGINE ---
-st.markdown("---")
-st.markdown("### 📊 Registry Search")
-st.markdown("Search The National Registry for members and 'rinking names")
-
-# Import the engine
+# Import the spreadsheet engine (used by registry views)
 from spreadsheet_engine import SpreadsheetEngine
 import pandas as pd
-
 
 # Function to load The National Registry from Google Sheets
 @st.cache_resource
@@ -1555,7 +1266,7 @@ def load_national_registry():
             return None
 
         # Google Sheets URL
-        sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit? usp=drive_link"
+        sheet_url = "https://docs.google.com/spreadsheets/d/1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U/edit?usp=drive_link"
 
         # Extract sheet ID from URL
         sheet_id = "1YatiITZyi4ItFToYUIOHLQV_CBL-PJyt85HIc5DOF8U"
@@ -1577,43 +1288,347 @@ def load_national_registry():
         st.error(f"❌ Error loading The National Registry: {str(e)}")
         return None
 
+# Function to change view
+def set_view(view_name):
+    st.session_state.current_view = view_name
+    st.rerun()
 
-# Load the registry automatically
-with st.spinner("📥 Loading The National Registry from Google Drive..."):
-    engine = load_national_registry()
+# Homepage branding (always show)
+st.markdown("""
+<div class="remcensus-brand">
+    <div class="remcensus-title">🦁 'Remcensus</div>
+    <div class="remcensus-tagline">Thinking is 'Rinking</div>
+</div>
+""", unsafe_allow_html=True)
 
-if engine is not None:
-    # Show basic info
-    with st.expander("📋 Registry Information", expanded=False):
-        report = engine.validate_data_quality()
+# --- HOME VIEW ---
+if st.session_state.current_view == "home":
+    # Show button menu
+    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        if st.button("Ask the 'Remsearch", use_container_width=True):
+            set_view("remsearch")
+    with col2:
+        if st.button("Search for 'Rinking Names", use_container_width=True):
+            set_view("rinking_names")
+    with col3:
+        if st.button("Find a 'Layer", use_container_width=True):
+            set_view("find_layer")
+    with col4:
+        if st.button("Generate an 'Uzzle", use_container_width=True):
+            st.info("🎲 'Uzzle generator coming soon!")
+    
+    # Filter options section
+    st.markdown("<div style='text-align: center; margin: 2rem 0; color: #666; font-size: 0.9rem;'>✨ Features: AI-Powered • Date Filtering • Smart Categorization • Content Extraction</div>", unsafe_allow_html=True)
+    
+    # Add some feature highlights
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("### 📚 Protocol Archives")
+        st.markdown("Search through comprehensive 'Remier League documentation")
+    with col2:
+        st.markdown("### 🔍 Smart Search")
+        st.markdown("AI-powered search with context and date filtering")
+    with col3:
+        st.markdown("### 📊 Registry Access")
+        st.markdown("Quick lookup of members and 'rinking names")
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Members", report["total_rows"])
-        with col2:
-            st.metric("Total Columns", report["total_columns"])
-        with col3:
-            st.metric("Duplicate Rows", report["duplicates"])
+# --- ASK THE 'REMSEARCH VIEW ---
+elif st.session_state.current_view == "remsearch":
+    # Back button
+    if st.button("← Back to Home"):
+        set_view("home")
+    
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    
+    # Search bar
+    query = st.text_input("", placeholder="Ask the 'Remsearch", label_visibility="collapsed", key="remsearch_input")
 
-        if report["warnings"]:
-            with st.expander("⚠️ Data Quality Warnings"):
-                for warning in report["warnings"][:5]:  # Show first 5 warnings
-                    st.write(f"• {warning}")
-        else:
-            st.success("✅ No data quality issues detected")
+    if query:
+        with st.spinner("🌀 Triage in progress..."):
+            search_process = {
+                "query": query,
+                "timestamp": datetime.now().isoformat(),
+                "category_detection": None,
+                "date_constraints": None,
+                "pinecone_results": [],
+                "drive_results": [],
+                "extracted_content": [],
+                "llm_engine_used": None,
+                "errors": [],
+            }
+    
+            # Clear any stale session cache
+            if "last_query" in st.session_state and st.session_state.last_query == query:
+                logger.info("Query cache detected - forcing refresh...")
+            st.session_state.last_query = query
+    
+            try:
+                logger.info(f"Processing query: {query[: 100]}...")
+    
+                # Step 1: Pinecone retrieval
+                logger.info("Step 1: Running Pinecone embedding and retrieval...")
+                result = st.session_state.google_client.models.embed_content(
+                    model="text-embedding-004", contents=query
+                )
+                search_results = st.session_state.pc_index.query(
+                    vector=result.embeddings[0].values, top_k=5, include_metadata=True
+                )
+                context_text = ""
+    
+                for match in search_results["matches"]:
+                    meta = match["metadata"]
+                    context_text += f"Source: {meta.get('source', 'Unknown')}\nContent: {meta.get('text', '')}\n\n"
+                    search_process["pinecone_results"].append(
+                        {
+                            "source": meta.get("source", "Unknown"),
+                            "score": match.get("score", "N/A"),
+                        }
+                    )
+    
+                logger.info(f"Pinecone returned {len(search_results['matches'])} results")
+    
+                # Step 2: Google Drive search (background, with date filtering)
+                logger.info("Step 2: Fetching from Google Drive (background)...")
+                try:
+                    if st.session_state.drive_service is None:
+                        logger.warning("Drive service is None - skipping Drive search")
+                        search_process["errors"].append("Drive service not initialized")
+                    else:
+                        logger.info("Extracting date constraints from query...")
+                        date_constraints = extract_date_constraints_from_query(query)
+                        search_process["date_constraints"] = {
+                            k: str(v) if isinstance(v, datetime) else v
+                            for k, v in date_constraints.items()
+                        }
+    
+                        logger.info("Detecting category intent from query...")
+                        category_match, subcategory_match, category_confidence = (
+                            match_category(query.lower(), RACRL_FOLDER_MAP)
+                        )
+                        search_process["category_detection"] = {
+                            "category": category_match,
+                            "subcategory": subcategory_match,
+                            "confidence": category_confidence,
+                        }
+    
+                        logger.info(
+                            "Searching Drive with threshold-based filtering and date constraints..."
+                        )
+                        drive_files = fetch_drive_recent_files(
+                            "10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9",
+                            search_query=query,
+                            score_threshold=SCORE_THRESHOLD,
+                        )
+    
+                        logger.info(f"Found {len(drive_files)} files")
+    
+                        if drive_files:
+                            for idx, f in enumerate(drive_files):
+                                search_process["drive_results"].append(
+                                    {
+                                        "rank": idx + 1,
+                                        "name": f.get("name"),
+                                        "mime_type": f.get("mimeType"),
+                                        "modified": f.get("modifiedTimeISO"),
+                                    }
+                                )
+    
+                            # Extract content from first file if enabled
+                            if extract_content and len(drive_files) > 0:
+                                logger.info("Extracting content from first file...")
+    
+                                first_file = drive_files[0]
+                                file_id = first_file.get("id")
+                                file_name = first_file.get("name")
+                                mime_type = first_file.get("mimeType")
+    
+                                content, success, error = extract_file_content(
+                                    st.session_state.drive_service,
+                                    file_id,
+                                    mime_type,
+                                    file_name,
+                                )
+    
+                                if success:
+                                    logger.info(f"Successfully extracted {file_name}")
+                                    search_process["extracted_content"].append(
+                                        {
+                                            "filename": file_name,
+                                            "mime_type": mime_type,
+                                            "content_length": len(content),
+                                        }
+                                    )
+                                    context_text += f"\n\n--- Content from {file_name} ---\n{content[: 10000]}\n"
+                                else:
+                                    logger.error(f"Failed to extract {file_name}: {error}")
+                                    search_process["errors"].append(
+                                        f"Content extraction failed: {error}"
+                                    )
+    
+                            # Add metadata (hidden from UI but in context)
+                            context_text += "\n---\nGoogle Drive Files Found:\n"
+                            for f in drive_files:
+                                context_text += f"- {f.get('name')} (Modified: {f.get('modifiedTimeISO')})\n"
+    
+                        else:
+                            logger.warning("No files found in Drive search")
+                            search_process["errors"].append(
+                                "No files found in Drive search"
+                            )
+    
+                except Exception as e_drive:
+                    logger.error(
+                        f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}"
+                    )
+                    search_process["errors"].append(f"Drive search error: {str(e_drive)}")
+    
+                # Step 3: Generate response with CLEAN context
+                logger.info("Step 3: Preparing context for LLM...")
+    
+                # Extract ONLY content from the primary (first) file
+                # Don't include metadata or other files' content
+                primary_content_start = context_text.find("--- Content from")
+                if primary_content_start != -1:
+                    # Find the end of first file content (before the metadata section)
+                    metadata_start = context_text.find(
+                        "\n---\nGoogle Drive Files Found:", primary_content_start
+                    )
+                    if metadata_start != -1:
+                        context_for_llm = context_text[primary_content_start:metadata_start]
+                    else:
+                        context_for_llm = context_text[primary_content_start:]
+                else:
+                    context_for_llm = context_text
+    
+                # Remove any metadata markers
+                context_for_llm = re.sub(
+                    r"\n---\nGoogle Drive Files Found: .*",
+                    "",
+                    context_for_llm,
+                    flags=re.DOTALL,
+                )
+    
+                logger.info(
+                    f"Context sent to LLM: {len(context_for_llm)} chars (primary file only)"
+                )
+    
+                logger.info("Step 3: Generating response from LLM...")
+                raw_text, engine_used, logs = generate_response(context_for_llm, query)
+                search_process["llm_engine_used"] = engine_used
+                final_answer = enforce_rem_lexicon(raw_text)
+    
+                # Display result in a card
+                st.markdown(f"""
+                <div class="result-card">
+                    {final_answer}
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption(f"🤖 Generated via: {engine_used}")
+    
+                logger.info(f"Query processing completed. Engine: {engine_used}")
+    
+                # Developer mode only
+                if dev_mode:
+                    with st.expander("🔍 DEVELOPER MODE - Search Analysis"):
+                        st.markdown("### Search Process")
+                        st.write(f"**Query:** {search_process['query']}")
+                        st.write(f"**Timestamp:** {search_process['timestamp']}")
+    
+                        if search_process["date_constraints"]:
+                            st.write("**Date Constraints:**")
+                            for key, value in search_process["date_constraints"].items():
+                                if value:
+                                    st.write(f"  - {key}: {value}")
+    
+                        if search_process["category_detection"]:
+                            st.write(
+                                f"**Category Detected:** {search_process['category_detection']['category']}"
+                            )
+                            st.write(
+                                f"**Subcategory:** {search_process['category_detection']['subcategory']}"
+                            )
+    
+                        if search_process["drive_results"]:
+                            st.markdown("#### Files Found")
+                            for result in search_process["drive_results"]:
+                                st.write(
+                                    f"- **{result['name']}** ({result['mime_type']}, Modified:  {result.get('modified', 'N/A')})"
+                                )
+    
+                        if search_process["extracted_content"]:
+                            st.markdown("#### Extracted Content")
+                            for content in search_process["extracted_content"]:
+                                st.write(
+                                    f"- **{content['filename']}** ({content['content_length']} chars)"
+                                )
+    
+                        if search_process["errors"]:
+                            st.markdown("#### Errors")
+                            for error in search_process["errors"]:
+                                st.error(error)
+    
+                        st.markdown("#### Export Data")
+                        search_json = json.dumps(search_process, indent=2)
+                        st.download_button(
+                            label="📥 Download Search Process JSON",
+                            data=search_json,
+                            file_name=f"search_process_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                        )
+    
+            except Exception as e:
+                logger.error(
+                    f"Critical error:  {type(e).__name__} - {str(e)}", exc_info=True
+                )
+                search_process["errors"].append(f"Critical error: {str(e)}")
+    
+                st.error(f"⚠️ Error processing query: {str(e)}")
+    
+                if dev_mode:
+                    with st.expander("🔴 Error Details"):
+                        st.write(f"**Error Type:** {type(e).__name__}")
+                        st.write(f"**Message:** {str(e)}")
+                        st.code(traceback.format_exc())
 
-    # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs(
-        [
-            "🎭 Search 'Rinking Names",
-            "👤 Name Lookup",
-            "🎓 Search by University",
-            "🔍 Search by Other Value",
-        ]
-    )
+# --- SEARCH FOR 'RINKING NAMES VIEW ---
+elif st.session_state.current_view == "rinking_names":
+    # Back button
+    if st.button("← Back to Home"):
+        set_view("home")
+    
+    st.markdown("---")
+    st.markdown("### 📊 Registry Search")
+    st.markdown("Search The National Registry for 'rinking names")
+    
+    # Load the registry automatically
+    with st.spinner("📥 Loading The National Registry from Google Drive..."):
+        engine = load_national_registry()
 
-    # ========== TAB 1: SEARCH 'RINKING NAMES ==========
-    with tab1:
+    if engine is not None:
+        # Show basic info
+        with st.expander("📋 Registry Information", expanded=False):
+            report = engine.validate_data_quality()
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Members", report["total_rows"])
+            with col2:
+                st.metric("Total Columns", report["total_columns"])
+            with col3:
+                st.metric("Duplicate Rows", report["duplicates"])
+
+            if report["warnings"]:
+                with st.expander("⚠️ Data Quality Warnings"):
+                    for warning in report["warnings"][:5]:  # Show first 5 warnings
+                        st.write(f"• {warning}")
+            else:
+                st.success("✅ No data quality issues detected")
+
+        # Show only Tab 1: Search 'Rinking Names
         st.subheader("Search 'Rinking Names")
         st.write("Search for members by 'rinking name.")
 
@@ -1679,54 +1694,153 @@ if engine is not None:
                             )
             else:
                 st.warning("❌ No matches found.   Try a different search term.")
-
-    # ========== TAB 2: NAME LOOKUP ==========
-    with tab2:
-        st.subheader("Search by Full Name")
-        st.write("Find a member by their full name.")
-
-        lookup_query = st.text_input(
-            "Enter full name:",
-            placeholder="e.g., 'Harry Foley'",
-            key="fullname_lookup_query",
+    else:
+        st.error(
+            "❌ Failed to load The National Registry.   Please check your internet connection."
         )
 
-        if lookup_query:
-            with st.spinner("🔍 Searching..."):
-                results = engine.search(lookup_query, "Full Name", min_score=0.50)
+# --- FIND A 'LAYER VIEW ---
+elif st.session_state.current_view == "find_layer":
+    # Back button
+    if st.button("← Back to Home"):
+        set_view("home")
+    
+    st.markdown("---")
+    st.markdown("### 📊 Registry Search")
+    st.markdown("Search The National Registry for members")
+    
+    # Load the registry automatically
+    with st.spinner("📥 Loading The National Registry from Google Drive..."):
+        engine = load_national_registry()
 
-            if results:
-                st.success(f"✅ Found {len(results)} match(es)")
+    if engine is not None:
+        # Show basic info
+        with st.expander("📋 Registry Information", expanded=False):
+            report = engine.validate_data_quality()
 
-                for i, result in enumerate(results):
-                    with st.expander(
-                        f"#{i+1} - {result.value} (Score: {result.score:.1%})",
-                        expanded=(i == 0),
-                    ):
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("Match Score", f"{result.score:.1%}")
-                        with col2:
-                            st.metric("Strategy", result.strategy.value.title())
-                        with col3:
-                            st.metric("Field", result.column)
-                        with col4:
-                            st.metric("Row ID", result.row_index)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Members", report["total_rows"])
+            with col2:
+                st.metric("Total Columns", report["total_columns"])
+            with col3:
+                st.metric("Duplicate Rows", report["duplicates"])
 
-                        st.divider()
+            if report["warnings"]:
+                with st.expander("⚠️ Data Quality Warnings"):
+                    for warning in report["warnings"][:5]:  # Show first 5 warnings
+                        st.write(f"• {warning}")
+            else:
+                st.success("✅ No data quality issues detected")
 
-                        row_data = engine.get_row_data(result.row_index)
+        # Create tabs for the 3 search options
+        tab1, tab2, tab3 = st.tabs(
+            [
+                "👤 Name Lookup",
+                "🎓 Search by University",
+                "🔍 Search by Other Value",
+            ]
+        )
 
-                        rinking_name = engine.get_safe_value(
-                            row_data, ["'rinking Name", "Drinking Name"]
-                        )
-                        full_name = engine.get_safe_value(row_data, ["Full Name"])
+        # ========== TAB 1: NAME LOOKUP ==========
+        with tab1:
+            st.subheader("Search by Full Name")
+            st.write("Find a member by their full name.")
+
+            lookup_query = st.text_input(
+                "Enter full name:",
+                placeholder="e.g., 'Harry Foley'",
+                key="fullname_lookup_query",
+            )
+
+            if lookup_query:
+                with st.spinner("🔍 Searching..."):
+                    results = engine.search(lookup_query, "Full Name", min_score=0.50)
+
+                if results:
+                    st.success(f"✅ Found {len(results)} match(es)")
+
+                    for i, result in enumerate(results):
+                        with st.expander(
+                            f"#{i+1} - {result.value} (Score: {result.score:.1%})",
+                            expanded=(i == 0),
+                        ):
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("Match Score", f"{result.score:.1%}")
+                            with col2:
+                                st.metric("Strategy", result.strategy.value.title())
+                            with col3:
+                                st.metric("Field", result.column)
+                            with col4:
+                                st.metric("Row ID", result.row_index)
+
+                            st.divider()
+
+                            row_data = engine.get_row_data(result.row_index)
+
+                            rinking_name = engine.get_safe_value(
+                                row_data, ["'rinking Name", "Drinking Name"]
+                            )
+                            full_name = engine.get_safe_value(row_data, ["Full Name"])
+                            university = engine.get_safe_value(row_data, ["University"])
+                            graduation_year = engine.get_safe_value(
+                                row_data,
+                                [
+                                    "Est.  Year of Graduation",
+                                    "Est.  Year of Graduation",
+                                    "Est Year of Graduation",
+                                    "Estimated Year of Graduation",
+                                ],
+                            )
+
+                            st.write("**Member Details:**")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"🎭 **'rinking Name:** {rinking_name}")
+                                st.write(f"👤 **Full Name:** {full_name}")
+                            with col2:
+                                st.write(f"🎓 **University:** {university}")
+                                st.write(f"📅 **Graduation:** {graduation_year}")
+
+                            with st.expander("📋 Full Member Record"):
+                                st.dataframe(
+                                    pd.DataFrame([row_data]).T, use_container_width=True
+                                )
+                else:
+                    st.error("❌ No match found.  Try a different name.")
+
+        # ========== TAB 2: SEARCH BY UNIVERSITY ==========
+        with tab2:
+            st.subheader("Search by University")
+            st.write("Find all members from a specific university.")
+
+            universities = sorted(
+                [u for u in engine.df["University"].unique() if pd.notna(u)]
+            )
+            selected_uni = st.selectbox(
+                "Select university:", universities, key="uni_filter_select"
+            )
+
+            if st.button("Go", key="uni_filter_go"):
+                filtered_df = engine.df[engine.df["University"] == selected_uni]
+                st.success(f"✅ Found {len(filtered_df)} member(s) from {selected_uni}")
+
+                # Display results
+                for idx, row in filtered_df.iterrows():
+                    row_data = dict(row)
+                    rinking_name = engine.get_safe_value(
+                        row_data, ["'rinking Name", "Drinking Name"]
+                    )
+                    full_name = engine.get_safe_value(row_data, ["Full Name"])
+
+                    with st.expander(f"{rinking_name} - {full_name}"):
                         university = engine.get_safe_value(row_data, ["University"])
                         graduation_year = engine.get_safe_value(
                             row_data,
                             [
-                                "Est.  Year of Graduation",
-                                "Est.  Year of Graduation",
+                                "Est. Year of Graduation",
+                                "Est.   Year of Graduation",
                                 "Est Year of Graduation",
                                 "Estimated Year of Graduation",
                             ],
@@ -1741,201 +1855,149 @@ if engine is not None:
                             st.write(f"🎓 **University:** {university}")
                             st.write(f"📅 **Graduation:** {graduation_year}")
 
-                        with st.expander("📋 Full Member Record"):
+                        with st.expander("📋 Full Record"):
                             st.dataframe(
                                 pd.DataFrame([row_data]).T, use_container_width=True
                             )
-            else:
-                st.error("❌ No match found.  Try a different name.")
 
-    # ========== TAB 3: SEARCH BY UNIVERSITY ==========
-    with tab3:
-        st.subheader("Search by University")
-        st.write("Find all members from a specific university.")
+        # ========== TAB 3: SEARCH BY OTHER VALUE ==========
+        with tab3:
+            st.subheader("Search by Other Value")
+            st.write("Find members by various attributes.")
 
-        universities = sorted(
-            [u for u in engine.df["University"].unique() if pd.notna(u)]
-        )
-        selected_uni = st.selectbox(
-            "Select university:", universities, key="uni_filter_select"
-        )
+            # Columns to exclude
+            exclude_cols = {"'rinking Name", "Drinking Name", "Full Name", "University"}
+            available_cols = [col for col in engine.df.columns if col not in exclude_cols]
 
-        if st.button("Go", key="uni_filter_go"):
-            filtered_df = engine.df[engine.df["University"] == selected_uni]
-            st.success(f"✅ Found {len(filtered_df)} member(s) from {selected_uni}")
-
-            # Display results
-            for idx, row in filtered_df.iterrows():
-                row_data = dict(row)
-                rinking_name = engine.get_safe_value(
-                    row_data, ["'rinking Name", "Drinking Name"]
-                )
-                full_name = engine.get_safe_value(row_data, ["Full Name"])
-
-                with st.expander(f"{rinking_name} - {full_name}"):
-                    university = engine.get_safe_value(row_data, ["University"])
-                    graduation_year = engine.get_safe_value(
-                        row_data,
-                        [
-                            "Est. Year of Graduation",
-                            "Est.   Year of Graduation",
-                            "Est Year of Graduation",
-                            "Estimated Year of Graduation",
-                        ],
-                    )
-
-                    st.write("**Member Details:**")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"🎭 **'rinking Name:** {rinking_name}")
-                        st.write(f"👤 **Full Name:** {full_name}")
-                    with col2:
-                        st.write(f"🎓 **University:** {university}")
-                        st.write(f"📅 **Graduation:** {graduation_year}")
-
-                    with st.expander("📋 Full Record"):
-                        st.dataframe(
-                            pd.DataFrame([row_data]).T, use_container_width=True
-                        )
-
-    # ========== TAB 4: SEARCH BY OTHER VALUE ==========
-    with tab4:
-        st.subheader("Search by Other Value")
-        st.write("Find members by various attributes.")
-
-        # Columns to exclude
-        exclude_cols = {"'rinking Name", "Drinking Name", "Full Name", "University"}
-        available_cols = [col for col in engine.df.columns if col not in exclude_cols]
-
-        selected_col = st.selectbox(
-            "Select field:", available_cols, key="other_value_select"
-        )
-
-        if st.button("Go", key="other_value_go"):
-            # Get unique values for the selected column
-            unique_values = sorted(
-                [str(v) for v in engine.df[selected_col].unique() if pd.notna(v)]
+            selected_col = st.selectbox(
+                "Select field:", available_cols, key="other_value_select"
             )
 
-            if not unique_values:
-                st.warning(f"No values found in {selected_col}")
-            else:
-                # Display all unique values
-                st.write(f"**Values in {selected_col}:**")
+            if st.button("Go", key="other_value_go"):
+                # Get unique values for the selected column
+                unique_values = sorted(
+                    [str(v) for v in engine.df[selected_col].unique() if pd.notna(v)]
+                )
 
-                for value in unique_values:
-                    # Filter rows that match this value
-                    filtered_df = engine.df[
-                        engine.df[selected_col].astype(str) == value
-                    ]
+                if not unique_values:
+                    st.warning(f"No values found in {selected_col}")
+                else:
+                    # Display all unique values
+                    st.write(f"**Values in {selected_col}:**")
 
-                    # Special sorting for Current/'ast columns
-                    if selected_col in [
-                        "NHA",
-                        "NHA Chair",
-                        "RACRL",
-                        "KHA",
-                        "NSWHA",
-                        "SAHA",
-                        "VHA",
-                        "WAHA",
-                        "THA",
-                    ]:
-                        # Sort:  Current first, then 'ast by graduation year (most recent first)
-                        def sort_key(row):
-                            status = str(row.get(selected_col, ""))
-                            graduation = row.get(
-                                "Est. Year of Graduation",
-                                row.get("Est.   Year of Graduation", 0),
-                            )
+                    for value in unique_values:
+                        # Filter rows that match this value
+                        filtered_df = engine.df[
+                            engine.df[selected_col].astype(str) == value
+                        ]
 
-                            # Try to convert to int for sorting
-                            try:
-                                grad_year = (
-                                    int(graduation)
-                                    if graduation not in [None, "", "nan"]
-                                    else 0
-                                )
-                            except:
-                                grad_year = 0
-
-                            # Current comes first (0), then 'ast sorted by year descending (1 + negative year)
-                            if status == "Current":
-                                return (0, 0)
-                            elif status == "'ast":
-                                return (1, -grad_year)
-                            else:
-                                return (2, -grad_year)
-
-                        filtered_df = filtered_df.copy()
-                        filtered_df["sort_key"] = filtered_df.apply(sort_key, axis=1)
-                        filtered_df = filtered_df.sort_values("sort_key").drop(
-                            "sort_key", axis=1
-                        )
-
-                    else:
-                        # Sort by graduation year (most recent first)
-                        def get_graduation_year(row):
-                            graduation = row.get(
-                                "Est. Year of Graduation",
-                                row.get("Est.  Year of Graduation", 0),
-                            )
-                            try:
-                                return (
-                                    -int(graduation)
-                                    if graduation not in [None, "", "nan"]
-                                    else 0
-                                )
-                            except:
-                                return 0
-
-                        filtered_df = filtered_df.copy()
-                        filtered_df["sort_key"] = filtered_df.apply(
-                            get_graduation_year, axis=1
-                        )
-                        filtered_df = filtered_df.sort_values("sort_key").drop(
-                            "sort_key", axis=1
-                        )
-
-                    # Display results grouped by value
-                    with st.expander(f"**{value}** ({len(filtered_df)} member(s))"):
-                        for idx, row in filtered_df.iterrows():
-                            row_data = dict(row)
-
-                            rinking_name = engine.get_safe_value(
-                                row_data, ["'rinking Name", "Drinking Name"]
-                            )
-                            full_name = engine.get_safe_value(row_data, ["Full Name"])
-                            university = engine.get_safe_value(row_data, ["University"])
-                            graduation_year = engine.get_safe_value(
-                                row_data,
-                                [
+                        # Special sorting for Current/'ast columns
+                        if selected_col in [
+                            "NHA",
+                            "NHA Chair",
+                            "RACRL",
+                            "KHA",
+                            "NSWHA",
+                            "SAHA",
+                            "VHA",
+                            "WAHA",
+                            "THA",
+                        ]:
+                            # Sort:  Current first, then 'ast by graduation year (most recent first)
+                            def sort_key(row):
+                                status = str(row.get(selected_col, ""))
+                                graduation = row.get(
                                     "Est. Year of Graduation",
-                                    "Est.   Year of Graduation",
-                                    "Est Year of Graduation",
-                                    "Estimated Year of Graduation",
-                                ],
+                                    row.get("Est.   Year of Graduation", 0),
+                                )
+
+                                # Try to convert to int for sorting
+                                try:
+                                    grad_year = (
+                                        int(graduation)
+                                        if graduation not in [None, "", "nan"]
+                                        else 0
+                                    )
+                                except:
+                                    grad_year = 0
+
+                                # Current comes first (0), then 'ast sorted by year descending (1 + negative year)
+                                if status == "Current":
+                                    return (0, 0)
+                                elif status == "'ast":
+                                    return (1, -grad_year)
+                                else:
+                                    return (2, -grad_year)
+
+                            filtered_df = filtered_df.copy()
+                            filtered_df["sort_key"] = filtered_df.apply(sort_key, axis=1)
+                            filtered_df = filtered_df.sort_values("sort_key").drop(
+                                "sort_key", axis=1
                             )
 
-                            with st.expander(f"{rinking_name} - {full_name}"):
-                                st.write("**Member Details:**")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.write(f"🎭 **'rinking Name:** {rinking_name}")
-                                    st.write(f"👤 **Full Name:** {full_name}")
-                                with col2:
-                                    st.write(f"🎓 **University:** {university}")
-                                    st.write(f"📅 **Graduation:** {graduation_year}")
-
-                                with st.expander("📋 Full Record"):
-                                    st.dataframe(
-                                        pd.DataFrame([row_data]).T,
-                                        use_container_width=True,
+                        else:
+                            # Sort by graduation year (most recent first)
+                            def get_graduation_year(row):
+                                graduation = row.get(
+                                    "Est. Year of Graduation",
+                                    row.get("Est.  Year of Graduation", 0),
+                                )
+                                try:
+                                    return (
+                                        -int(graduation)
+                                        if graduation not in [None, "", "nan"]
+                                        else 0
                                     )
+                                except:
+                                    return 0
 
-else:
-    st.error(
-        "❌ Failed to load The National Registry.   Please check your internet connection."
-    )
+                            filtered_df = filtered_df.copy()
+                            filtered_df["sort_key"] = filtered_df.apply(
+                                get_graduation_year, axis=1
+                            )
+                            filtered_df = filtered_df.sort_values("sort_key").drop(
+                                "sort_key", axis=1
+                            )
 
-logger.info("Spreadsheet analysis section rendered")
+                        # Display results grouped by value
+                        with st.expander(f"**{value}** ({len(filtered_df)} member(s))"):
+                            for idx, row in filtered_df.iterrows():
+                                row_data = dict(row)
+
+                                rinking_name = engine.get_safe_value(
+                                    row_data, ["'rinking Name", "Drinking Name"]
+                                )
+                                full_name = engine.get_safe_value(row_data, ["Full Name"])
+                                university = engine.get_safe_value(row_data, ["University"])
+                                graduation_year = engine.get_safe_value(
+                                    row_data,
+                                    [
+                                        "Est. Year of Graduation",
+                                        "Est.   Year of Graduation",
+                                        "Est Year of Graduation",
+                                        "Estimated Year of Graduation",
+                                    ],
+                                )
+
+                                with st.expander(f"{rinking_name} - {full_name}"):
+                                    st.write("**Member Details:**")
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.write(f"🎭 **'rinking Name:** {rinking_name}")
+                                        st.write(f"👤 **Full Name:** {full_name}")
+                                    with col2:
+                                        st.write(f"🎓 **University:** {university}")
+                                        st.write(f"📅 **Graduation:** {graduation_year}")
+
+                                    with st.expander("📋 Full Record"):
+                                        st.dataframe(
+                                            pd.DataFrame([row_data]).T,
+                                            use_container_width=True,
+                                        )
+
+    else:
+        st.error(
+            "❌ Failed to load The National Registry.   Please check your internet connection."
+        )
+
+logger.info("Application render completed")
