@@ -1261,8 +1261,6 @@ def fetch_drive_recent_files(
         )
         raise
 
-        raise
-
 
 # --- 7. MAIN INTERFACE ---
 
