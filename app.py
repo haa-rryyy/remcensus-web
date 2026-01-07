@@ -1170,6 +1170,7 @@ SYSTEM_PROMPT = (
     "         IJ. (Replaces 10.)\n"
     "   - PROTOCOL E (NEWLINES): 'BJ.', 'TK.', and 'IJ.' MUST be followed by the content on the SAME line, but the delimiter itself MUST start a NEW line.\n"
     "7.Format: Direct answers only. No narrative, actions, or roleplay."
+    "8.ANTI-HALLUCINATION GUARDRAIL: You are strictly forbidden from inventing games, variations, or terms. If the user asks about a game (e.g. 'Backwards Rem', 'Inverted Rem') that does not explicitly exist in the provided context, you MUST state: 'I cannot find any record of [Name] in the archives.' Do not attempt to guess how it might work."
 )
 
 
@@ -1560,7 +1561,7 @@ elif st.session_state.current_view == "remsearch":
         submit_button = st.form_submit_button("🔍 Search", use_container_width=False)
 
     if query and submit_button:
-        with st.spinner("🌀 Triage in progress..."):
+        with st.spinner("🌀 Whizzzzzzzzzzzzzzzzzzzing..."):
             search_process = {
                 "query": query,
                 "timestamp": datetime.now().isoformat(),
@@ -1579,10 +1580,20 @@ elif st.session_state.current_view == "remsearch":
             st.session_state.last_query = query
     
             try:
+                # --- PHASE 1: INPUT GUARDRAIL (Security Check) ---
+                is_safe_query, guardrail_msg = check_hardcoded_failsafe(query)
+                if not is_safe_query:
+                    logger.warning(f"Guardrail triggered for query: {query}")
+                    st.markdown(f"""
+                    <div class="result-card" style="text-align: center; color: #d32f2f;">
+                        <h3>{guardrail_msg}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.stop()  # Stop execution immediately
+
                 logger.info(f"Processing query: {query[: 100]}...")
     
                 # Step 1: Pinecone retrieval
-                logger.info("Step 1: Running Pinecone embedding and retrieval...")
                 result = st.session_state.google_client.models.embed_content(
                     model="text-embedding-004", contents=query
                 )
@@ -1601,188 +1612,100 @@ elif st.session_state.current_view == "remsearch":
                         }
                     )
     
-                logger.info(f"Pinecone returned {len(search_results['matches'])} results")
-    
-                # Step 2: Google Drive search (background, with date filtering)
-                logger.info("Step 2: Fetching from Google Drive (background)...")
+                # Step 2: Google Drive search
                 try:
-                    if st.session_state.drive_service is None:
-                        logger.warning("Drive service is None - skipping Drive search")
-                        search_process["errors"].append("Drive service not initialized")
-                    else:
-                        logger.info("Extracting date constraints from query...")
+                    if st.session_state.drive_service:
                         date_constraints = extract_date_constraints_from_query(query)
-                        search_process["date_constraints"] = {
-                            k: str(v) if isinstance(v, datetime) else v
-                            for k, v in date_constraints.items()
-                        }
+                        search_process["date_constraints"] = {k: str(v) if isinstance(v, datetime) else v for k, v in date_constraints.items()}
+                        
+                        category_match, subcategory_match, category_confidence = match_category(query.lower(), RACRL_FOLDER_MAP)
+                        search_process["category_detection"] = {"category": category_match, "subcategory": subcategory_match, "confidence": category_confidence}
     
-                        logger.info("Detecting category intent from query...")
-                        category_match, subcategory_match, category_confidence = (
-                            match_category(query.lower(), RACRL_FOLDER_MAP)
-                        )
-                        search_process["category_detection"] = {
-                            "category": category_match,
-                            "subcategory": subcategory_match,
-                            "confidence": category_confidence,
-                        }
-    
-                        logger.info(
-                            "Searching Drive with threshold-based filtering and date constraints..."
-                        )
-                        drive_files = fetch_drive_recent_files(
-                            "10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9",
-                            search_query=query,
-                            score_threshold=SCORE_THRESHOLD,
-                        )
-    
-                        logger.info(f"Found {len(drive_files)} files")
+                        drive_files = fetch_drive_recent_files("10B8EsEQ2TlzQP5ADD43TcDSs_xp3plj9", search_query=query, score_threshold=SCORE_THRESHOLD)
     
                         if drive_files:
                             for idx, f in enumerate(drive_files):
-                                search_process["drive_results"].append(
-                                    {
-                                        "rank": idx + 1,
-                                        "name": f.get("name"),
-                                        "mime_type": f.get("mimeType"),
-                                        "modified": f.get("modifiedTimeISO"),
-                                    }
-                                )
+                                search_process["drive_results"].append({"rank": idx + 1, "name": f.get("name"), "mime_type": f.get("mimeType"), "modified": f.get("modifiedTimeISO")})
     
-                            # Extract content from TOP 3 files if enabled
-                            if extract_content and len(drive_files) > 0:
-                                logger.info("Extracting content from top files...")
-                            
-                                # Process up to 3 files
+                            # Extract content from TOP 3 files
+                            if extract_content:
                                 files_to_process = drive_files[:3] 
-                            
                                 for i, file_obj in enumerate(files_to_process):
                                     file_id = file_obj.get("id")
                                     file_name = file_obj.get("name")
                                     mime_type = file_obj.get("mimeType")
-                                    # [NEW] Get the link for citations
                                     file_url = file_obj.get("webViewLink", "#") 
 
-                                    content, success, error = extract_file_content(
-                                        st.session_state.drive_service,
-                                        file_id,
-                                        mime_type,
-                                        file_name,
-                                    )
+                                    content, success, error = extract_file_content(st.session_state.drive_service, file_id, mime_type, file_name)
 
                                     if success:
-                                        logger.info(f"Successfully extracted {file_name}")
-                                        search_process["extracted_content"].append(
-                                            {
-                                                "filename": file_name,
-                                                "mime_type": mime_type,
-                                                "content_length": len(content),
-                                            }
-                                        )
-                                        # Append to context with header AND Link for the AI to reference
+                                        search_process["extracted_content"].append({"filename": file_name, "mime_type": mime_type, "content_length": len(content)})
                                         context_text += f"\n\n--- Source {i+1}: {file_name} (Link: {file_url}) ---\n{content[: 8000]}\n" 
                                     else:
-                                        logger.error(f"Failed to extract {file_name}: {error}")
-                                        search_process["errors"].append(
-                                            f"Content extraction failed for {file_name}: {error}"
-                                        )
+                                        search_process["errors"].append(f"Content extraction failed for {file_name}: {error}")
     
-                            # Add metadata (hidden from UI but in context)
+                            # Add metadata
                             context_text += "\n---\nGoogle Drive Files Found:\n"
                             for f in drive_files:
                                 context_text += f"- {f.get('name')} (Modified: {f.get('modifiedTimeISO')})\n"
     
-                        else:
-                            logger.warning("No files found in Drive search")
-                            search_process["errors"].append(
-                                "No files found in Drive search"
-                            )
-    
                 except Exception as e_drive:
-                    logger.error(
-                        f"Drive search failed: {type(e_drive).__name__} - {str(e_drive)}"
-                    )
+                    logger.error(f"Drive search failed: {str(e_drive)}")
                     search_process["errors"].append(f"Drive search error: {str(e_drive)}")
     
-                # Step 3: Generate response
-            
-            # --- PHASE 1: INPUT GUARDRAIL (Security Check) ---
-            # Catches "How to play BJ" or "Difference between BJ and X"
-            is_safe_query, guardrail_msg = check_hardcoded_failsafe(search_query)
-            if not is_safe_query:
-                logger.warning(f"Guardrail triggered for query: {search_query}")
-                st.toast("🔒 Didactic Protocol Engaged")
-                # Add to chat history so the user sees the response
-                st.session_state.messages.append({"role": "assistant", "content": guardrail_msg})
-                st.write(guardrail_msg)
-                return  # STOP HERE. Do not call OpenAI.
-
-            # --- PHASE 2: GENERATION ---
-            logger.info("Step 3: Preparing context and generating...")
-
-            # Clean context (Keep your existing context cleaning logic)
-            metadata_start = context_text.find("\n---\nGoogle Drive Files Found:")
-            if metadata_start != -1:
-                context_for_llm = context_text[:metadata_start]
-            else:
-                context_for_llm = context_text
-
-            # Generate the Candidate Answer (No Streaming)
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Context:\n{context_for_llm}\n\nQuery: {search_query}"},
-            ]
-
-            try:
-                candidate_response = client.chat.completions.create(
-                    model=st.session_state["openai_model"],
-                    messages=messages,
-                    temperature=0.3, 
-                    stream=False
-                ).choices[0].message.content
+                # Step 3: Prepare Context
+                metadata_start = context_text.find("\n---\nGoogle Drive Files Found:")
+                if metadata_start != -1:
+                    context_for_llm = context_text[:metadata_start]
+                else:
+                    context_for_llm = context_text
+    
+                # --- PHASE 2: GENERATION ---
+                raw_text, engine_used, logs = generate_response(context_for_llm, query)
+                candidate_answer = enforce_rem_lexicon(raw_text)
+                search_process["llm_engine_used"] = engine_used
 
                 # --- PHASE 3: OUTPUT AUDITOR (Truth Check) ---
-                # Catches "Backwards Rem" (Hallucinations)
-                
                 auditor_system_prompt = (
                     "You are a Quality Control Auditor for the 'Remier League archives.\n"
                     "Your task is to compare a CANDIDATE ANSWER against the provided CONTEXT.\n"
                     "RULES:\n"
-                    "1. If the Answer describes a game variation or rule (like 'Backwards Rem' or 'Inverted Rem') that DOES NOT appear in the Context, return 'FAIL'.\n"
-                    "2. If the Answer invents concepts not in the text, return 'FAIL'.\n"
-                    "3. If the Answer is 'rink and learn' or refuses to answer, return 'PASS'.\n"
+                    "1. If the Answer mentions a specific game name (e.g. 'Backwards Rem', 'Inverted Rem') that DOES NOT appear in the Context, return 'FAIL'.\n"
+                    "2. If the Answer invents rules for a game that is not in the Context, return 'FAIL'.\n"
+                    "3. If the Answer is 'rink and learn', return 'PASS'.\n"
                     "4. If the Answer says it cannot find information, return 'PASS'.\n"
                     "5. Otherwise, if the answer is grounded in the text, return 'PASS'.\n"
                     "OUTPUT: Return ONLY the word 'PASS' or 'FAIL'."
                 )
                 
-                audit_check = client.chat.completions.create(
-                    model="gpt-3.5-turbo", # Fast, cheap check
-                    messages=[
-                        {"role": "system", "content": auditor_system_prompt},
-                        {"role": "user", "content": f"CONTEXT:\n{context_for_llm}\n\nCANDIDATE ANSWER:\n{candidate_response}"}
-                    ],
-                    temperature=0.0
-                )
-                
-                audit_result = audit_check.choices[0].message.content.strip().upper()
-                logger.info(f"Audit Result: {audit_result}")
+                try:
+                    audit_response = st.session_state.google_client.models.generate_content(
+                        model="gemini-1.5-flash",
+                        contents=f"CONTEXT:\n{context_for_llm}\n\nCANDIDATE ANSWER:\n{candidate_answer}",
+                        config={"system_instruction": auditor_system_prompt},
+                    )
+                    audit_result = audit_response.text.strip().upper()
+                except Exception:
+                    audit_result = "PASS"
 
                 if "FAIL" in audit_result:
-                    # Hallucination Caught
-                    st.warning("⚠️ The engine attempted to generate a response based on concepts not confirmed in the archives.")
-                    final_output = "I cannot find any official records matching the specific variation or concept you asked about in the archives. If this is a new or informal variation, it has not yet been documented."
+                    final_answer = "I cannot find any official records matching the specific variation or concept you asked about in the archives. If this is a new or informal variation, it has not yet been documented."
+                    st.warning("⚠️ The system attempted to generate a response about a game/concept not found in the archives. Result suppressed.")
                 else:
-                    # Pass
-                    final_output = candidate_response
-
-                # Display and Save
-                st.write(final_output)
-                st.session_state.messages.append({"role": "assistant", "content": final_output})
-
+                    final_answer = candidate_answer
+    
+                # Display result
+                st.markdown(f"""<div class="result-card">{final_answer}</div>""", unsafe_allow_html=True)
+                st.caption(f"🤖 Generated via: {engine_used}")
+    
+                # Developer Mode Logs (Optional - kept for compatibility)
+                if dev_mode:
+                    with st.expander("🔍 DEVELOPER MODE"):
+                        st.write(search_process)
+    
             except Exception as e:
-                logger.error(f"Error during generation: {e}")
-                st.error("An error occurred while generating the response.")
+                logger.error(f"Critical error: {str(e)}", exc_info=True)
+                st.error(f"⚠️ Error processing query: {str(e)}")
 
 # --- SEARCH FOR 'RINKING NAMES VIEW ---
 elif st.session_state.current_view == "rinking_names":
